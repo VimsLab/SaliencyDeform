@@ -1,0 +1,4 @@
+data/
+weights/
+history/
+**/__pycache__/

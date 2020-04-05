@@ -1,0 +1,8 @@
+name: document
+channels:
+- default
+dependencies:
+- python = 3.7
+- pip
+- numpy
+- matplotlib
