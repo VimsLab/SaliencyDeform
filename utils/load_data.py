@@ -37,7 +37,7 @@ def image_data_generator(
         color_mode='rgb',
         batch_size=32,
         shuffle=True,
-        horizontal_flip=True
+        horizontal_flip=False
     ):
     '''
     Perform realtime augmentation of data

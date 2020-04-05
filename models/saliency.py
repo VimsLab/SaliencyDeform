@@ -18,6 +18,23 @@ class SpectralSaliency(Layer):
         return spectral_saliency
 
 
+class AddChannels(Layer):
+    def call(self, activation_maps):
+        channel_saliency = tf.math.reduce_sum(activation_maps, 3)
+        channel_saliency = tf.expand_dims(channel_saliency, 3)
+        gaussian_weight = makeGaussian(8, 13)
+        gaussian_weights = tf.stack([gaussian_weight]*channel_saliency.shape[3], axis=2)
+        gaussian_weights = tf.stack([gaussian_weights]*1, axis=3)
+        channel_saliency = tf.nn.depthwise_conv2d(
+            channel_saliency,
+            gaussian_weights,
+            strides=[1, 1, 1, 1],
+            padding='SAME',
+            data_format='NHWC'
+        )
+        # import pdb; pdb.set_trace()
+        return channel_saliency
+
 
 class MergeSaliency(Layer):
     def build(self, input_shape):

@@ -1,11 +1,12 @@
 import os
 import numpy as np
-from tensorflow.keras.layers import Input, Layer, Dense, SeparableConv2D, DepthwiseConv2D, Conv2D, BatchNormalization, MaxPooling2D, AveragePooling2D, ZeroPadding2D, Dropout, Flatten, Add, Reshape, Activation, Lambda, GlobalAveragePooling2D
+from tensorflow.keras.layers import Input, Layer, Dense, SeparableConv2D, DepthwiseConv2D, GlobalMaxPooling2D, Conv2D, BatchNormalization, MaxPooling2D, AveragePooling2D, ZeroPadding2D, Dropout, Flatten, Add, Reshape, Activation, Lambda, GlobalAveragePooling2D
 from tensorflow.keras import Model, utils
 from tensorflow.keras.utils import plot_model
 from batch_deform import BatchRetarget
 from normalize import Normalize
-from saliency import SpectralSaliency, MergeSaliency
+from saliency import SpectralSaliency, MergeSaliency, AddChannels
+
 import math
 
 BASE_WEIGHTS_PATH = (
@@ -114,11 +115,9 @@ def get_conv_stride_size(x, n_out, k):
     return stride
 
 def salient_fn(x, k, stride, block_index):
-    n_in = x.shape[1]
-    n_out = 31
-    # for i in range(1):
-    #     x = Conv2D(x.shape[3], 3, strides=1, use_bias=True, name = 'saliency_conv_' + str(i) + '_' + block_index, padding = 'SAME')(x)
-    #     x = Activation('relu', name = 'saliency_conv_' + str(i) + '_' + block_index + '_relu')(x)
+    for i in range(5):
+        x = Conv2D(x.shape[3], 3, strides=1, use_bias=True, name = 'saliency_conv_' + str(i) + '_' + block_index, padding = 'SAME')(x)
+        x = Activation('relu', name = 'saliency_conv_' + str(i) + '_' + block_index + '_relu')(x)
     x = Conv2D(1, k, strides = stride, name = 'saliency' + block_index, use_bias=False, padding = 'VALID', activation = 'relu')(x)
     return x
 
@@ -165,35 +164,18 @@ def ResNet152(
 
     bn_axis = 3
     img_input = Input(shape=input_shape)
-    # x = ZeroPadding2D(padding=((3, 3), (3, 3)), name='conv_deform1_pad')(img_input)
-    k1 = 3
-    stride1 = 1
-    # x_salient_nw_1 = salient_fn(img_input, k1, stride1, '1')
-    # x_salient_nw_1_norm = Normalize()(x_salient_nw_1)
-    x_salient_spectral_1 = SpectralSaliency()(img_input)
-    x_salient_spectral_1 = SeparableConv2D(1, k1, stride1, use_bias = False, padding = 'VALID', activation = None)(x_salient_spectral_1)
-    x_salient_spectral_norm_1 = Normalize()(x_salient_spectral_1)
-    # x_salient_merged_0 = MergeSaliency()([x_salient_nw_0_norm, x_salient_spectral_norm_0])
-    x = BatchRetarget(name = 'retarget_0')([img_input, x_salient_spectral_norm_1])
+    x = SpectralSaliency()(img_input)
+    x = AddChannels()(x)
+    x = Normalize()(x)
+    # x = SeparableConv2D(1, 3, 1, use_bias=True, padding='VALID', activation='relu')(x)
+    x = BatchRetarget(name = 'retarget_1')([img_input, x])
+    x = ZeroPadding2D(padding=((3, 3), (3, 3)), name='conv1_pad')(x)
     x = Conv2D(64, 7, strides=2, use_bias=use_bias, name='conv1_conv')(x)
     x = BatchNormalization(axis=bn_axis, epsilon=1.001e-5,
                                   name='conv1_bn')(x)
-    # k2 = 3
-    # stride2 = 1
-    # print(stride2)
-    # x_salient_nw_2 = salient_fn(x, k2, stride2, '2')
-    # x_salient_nw_2_norm = Normalize()(x_salient_nw_2)
-    # x_salient_spectral_2 = SpectralSaliency()(x)
-    # x_salient_spectral_2 = SeparableConv2D(x.shape[3], k2, stride2, use_bias = True, padding = 'VALID', activation = 'relu')(x_salient_spectral_2)
-    # x_salient_spectral_2 = SeparableConv2D(x.shape[3], k2, stride2, use_bias = True, padding = 'VALID', activation = 'relu')(x_salient_spectral_2)
-    # x_salient_spectral_2 = SeparableConv2D(x.shape[3], k2, stride2, use_bias = True, padding = 'VALID', activation = 'relu')(x_salient_spectral_2)
-    # x_salient_spectral_2 = SeparableConv2D(1, k2, stride2, use_bias = True, padding = 'VALID')(x_salient_spectral_2)
-    # x_salient_spectral_norm_2 = Normalize()(x_salient_spectral_2)
-    # x_salient_merged_2 = MergeSaliency()([x_salient_nw_2_norm, x_salient_spectral_norm_2])
-    # x = BatchRetarget(name = 'retarget_2')([x, x_salient_spectral_norm_2])
-    # x = Activation('relu', name='conv1_relu')(x)
-    # x = ZeroPadding2D(padding=((1, 1), (1, 1)), name='pool1_pad')(x)
-    # x = MaxPooling2D(name = 'max_pooling_deform_2', pool_size = (2, 2), strides = None, padding = 'valid')(x)
+    x = Activation('relu', name='conv1_relu')(x)
+    x = ZeroPadding2D(padding=((1, 1), (1, 1)), name='pool1_pad')(x)
+    x = MaxPooling2D(3, strides=2, name='pool1_pool', padding = 'SAME')(x)
     x = stack_fn(x)
     if pooling == 'avg':
         x = GlobalAveragePooling2D(name='avg_pool')(x)

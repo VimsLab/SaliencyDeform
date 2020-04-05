@@ -57,7 +57,7 @@ if __name__ == '__main__':
         model.compile(optimizer=SGDW(lr=1e-4, weight_decay=1e-5, momentum=0.9),
                       loss='categorical_crossentropy',
                       metrics=['categorical_accuracy'])
-        model.load_weights('/home/ddot/document/clef16/weights/98406/cp-0120.ckpt')
+        model.load_weights('/media/jakep/Elements/document_weights/30693/cp-0022.ckpt')
 
     #Load data for test
     ip_img_cols = config['ip_img_cols']
@@ -68,7 +68,8 @@ if __name__ == '__main__':
         in_dir=TEST,
         preprocessing_function=preprocess_input_resnet,
         target_size=(ip_img_rows, ip_img_cols),
-        batch_size=batch_size
+        batch_size=batch_size,
+        horizontal_flip=False
     )
     steps = len(test_gen)
     test_gen = center_crop(test_gen, ip_img_rows, ip_img_cols, nw_img_cols)

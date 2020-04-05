@@ -59,9 +59,9 @@ if __name__ == '__main__':
         model.compile(optimizer=SGDW(lr=1e-5, weight_decay=1e-5, momentum=0.9),
                       loss='categorical_crossentropy',
                       metrics=['categorical_accuracy'])
-        model.load_weights('/home/ddot/document/clef16/weights/98406/cp-0120.ckpt').expect_partial()
+        model.load_weights('/media/jakep/Elements/document_weights/16791/cp-0003.ckpt').expect_partial()
 
-    visualize_layers_at = [2, 3, 4, 5, 6]
+    visualize_layers_at = [0,1,2, 3, 4, 5, 6,7,8,9]
     for visualize_layer_at in visualize_layers_at:
         #Load data for visualization
         ip_img_cols = config['ip_img_cols']
@@ -73,6 +73,7 @@ if __name__ == '__main__':
             preprocessing_function=preprocess_input_resnet,
             target_size=(ip_img_rows, ip_img_cols),
             batch_size=batch_size,
+            horizontal_flip=False,
             shuffle=False
         )
         steps = len(visual_gen)
@@ -91,10 +92,10 @@ if __name__ == '__main__':
         else:
             channels = feature_maps.shape[3]
         visualize_feature_maps(
-            num_img=1,
+            num_img=20,
             layer_index=visualize_layer_at,
             layer_name=layer_name,
             channels=channels,
             feature_maps=feature_maps,
-            visualize=True
+            visualize=False
         )

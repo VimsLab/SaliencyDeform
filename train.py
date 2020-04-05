@@ -27,7 +27,7 @@ for pth_import in pths_import:
     if pth_import not in sys.path:
         sys.path.append(pth_import)
 from util_visualize import check_loaded_data
-from custom_resnet import ResNet152
+from resnet import ResNet152
 from custom_callbacks import ValidationCallback, step_decay
 from load_data import image_data_generator
 from preprocess import center_crop
@@ -44,7 +44,7 @@ from tensorflow.keras.applications.resnet import preprocess_input as preprocess_
 if __name__ == '__main__':
     #Set up tensorflow envirornment
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-    os.environ["CUDA_VISIBLE_DEVICES"]="0, 1"
+    os.environ["CUDA_VISIBLE_DEVICES"]="1"
     os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
     print('Tensorflow version: {0}'.format(tf.__version__))
     print('Tensorflow addons version: {0}'.format(tfa.__version__))
@@ -81,7 +81,7 @@ if __name__ == '__main__':
             classes=classes,
             pth_hist=HISTORY
             )
-        model.compile(optimizer=SGDW(lr=1e-4, weight_decay=1e-5, momentum=0.9),
+        model.compile(optimizer=SGDW(lr=1e-5, weight_decay=1e-6, momentum=0.9),
                       loss='categorical_crossentropy',
                       metrics=['categorical_accuracy'])
     print('Model compiled')
@@ -95,12 +95,12 @@ if __name__ == '__main__':
     ip_img_cols = config['ip_img_cols']
     ip_img_rows = config['ip_img_rows']
     TRAIN = os.path.join(pth_data, 'train')
-
     train_gen = image_data_generator(
         in_dir=TRAIN,
         preprocessing_function=preprocess_input_resnet,
         target_size=(ip_img_rows, ip_img_cols),
-        batch_size=batch_size
+        batch_size=batch_size,
+        horizontal_flip=False
     )
     steps_per_epoch = len(train_gen)
     train_gen = center_crop(train_gen, ip_img_rows, ip_img_cols, nw_img_cols)
@@ -113,14 +113,14 @@ if __name__ == '__main__':
         in_dir=VALID,
         preprocessing_function=preprocess_input_resnet,
         target_size=(ip_img_rows, ip_img_cols),
-        batch_size=batch_size
+        batch_size=batch_size,
+        horizontal_flip=False
     )
     steps = len(valid_gen)
     valid_gen = center_crop(valid_gen, ip_img_rows, ip_img_cols, nw_img_cols)
     print('\n')
     print('Model input image resolution: ' + str(nw_img_cols) + 'x' + str(nw_img_cols))
     print('Model input batch_size: ' + str(batch_size))
-
 
     #Load Callbacks and training hyperparameters
     epochs = config['epochs']
@@ -136,7 +136,7 @@ if __name__ == '__main__':
     # lrate_callback = LearningRateScheduler(step_decay)
     history = model.fit(
         train_gen,
-        shuffle=True,
+        shuffle=False,
         epochs=epochs,
         steps_per_epoch=steps_per_epoch,
         verbose=1,

@@ -1,4 +1,6 @@
+results/
 data/
 weights/
 history/
 **/__pycache__/
+**.pyc

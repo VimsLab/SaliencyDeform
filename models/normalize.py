@@ -15,6 +15,8 @@ class Normalize(Layer):
               tf.math.reduce_min(activation_maps,[1,2], keepdims = True)
            )
         )
+        activation_maps = tf.math.subtract(1.0, activation_maps)
+
         # print(activation_maps.shape)
         # import pdb; pdb.set_trace()
         return activation_maps
