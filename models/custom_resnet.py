@@ -174,6 +174,10 @@ def ResNet152(
     x = BatchNormalization(axis=bn_axis, epsilon=1.001e-5,
                                   name='conv1_bn')(x)
     x = Activation('relu', name='conv1_relu')(x)
+    # xs2 = SpectralSaliency(name = 's2')(x)
+    # xs2 = AddChannels(name = 'a2')(xs2)
+    # xs2 = Normalize(name = 'n2')(xs2)
+    # x = BatchRetarget(name = 'retarget_2')([x, xs2])
     x = ZeroPadding2D(padding=((1, 1), (1, 1)), name='pool1_pad')(x)
     x = MaxPooling2D(3, strides=2, name='pool1_pool', padding = 'SAME')(x)
     x = stack_fn(x)

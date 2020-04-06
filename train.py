@@ -27,7 +27,7 @@ for pth_import in pths_import:
     if pth_import not in sys.path:
         sys.path.append(pth_import)
 from util_visualize import check_loaded_data
-from resnet import ResNet152
+from custom_resnet import ResNet152
 from custom_callbacks import ValidationCallback, step_decay
 from load_data import image_data_generator
 from preprocess import center_crop
@@ -44,7 +44,7 @@ from tensorflow.keras.applications.resnet import preprocess_input as preprocess_
 if __name__ == '__main__':
     #Set up tensorflow envirornment
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-    os.environ["CUDA_VISIBLE_DEVICES"]="1"
+    os.environ["CUDA_VISIBLE_DEVICES"]="0"
     os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
     print('Tensorflow version: {0}'.format(tf.__version__))
     print('Tensorflow addons version: {0}'.format(tfa.__version__))
@@ -84,6 +84,7 @@ if __name__ == '__main__':
         model.compile(optimizer=SGDW(lr=1e-5, weight_decay=1e-6, momentum=0.9),
                       loss='categorical_crossentropy',
                       metrics=['categorical_accuracy'])
+        model.load_weights('/home/ddot/document/clef16/weights/53894/cp-0120.ckpt')
     print('Model compiled')
     with open(os.path.join(HISTORY, 'model_summary.txt'), 'w') as f:
         with redirect_stdout(f):

@@ -59,7 +59,7 @@ if __name__ == '__main__':
         model.compile(optimizer=SGDW(lr=1e-5, weight_decay=1e-5, momentum=0.9),
                       loss='categorical_crossentropy',
                       metrics=['categorical_accuracy'])
-        model.load_weights('/media/jakep/Elements/document_weights/16791/cp-0003.ckpt').expect_partial()
+        model.load_weights('/home/ddot/document/clef16/weights/38452/cp-0110.ckpt').expect_partial()
 
     visualize_layers_at = [0,1,2, 3, 4, 5, 6,7,8,9]
     for visualize_layer_at in visualize_layers_at:

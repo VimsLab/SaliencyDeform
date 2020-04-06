@@ -32,6 +32,7 @@ class AddChannels(Layer):
             padding='SAME',
             data_format='NHWC'
         )
+        # print(channel_saliency.shape)
         # import pdb; pdb.set_trace()
         return channel_saliency
 

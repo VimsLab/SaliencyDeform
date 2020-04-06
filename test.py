@@ -35,7 +35,7 @@ from tensorflow_addons.optimizers.weight_decay_optimizers import SGDW
 if __name__ == '__main__':
     #Set up tensorflow envirornment
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-    os.environ["CUDA_VISIBLE_DEVICES"]="0, 1"
+    os.environ["CUDA_VISIBLE_DEVICES"]="0"
     os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
     print('Tensorflow version: {0}'.format(tf.__version__))
     print('Tensorflow addons version: {0}'.format(tfa.__version__))
@@ -45,19 +45,6 @@ if __name__ == '__main__':
     nw_img_cols = config['nw_img_cols']
     nw_img_rows = config['nw_img_rows']
     classes = config['classes']
-    mirrored_strategy = tf.distribute.MirroredStrategy()
-    with mirrored_strategy.scope():
-        model = ResNet152(
-            use_bias=True,
-            model_name='resnet152',
-            input_shape=(nw_img_rows, nw_img_cols, 3),
-            pooling='avg',
-            classes=classes
-        )
-        model.compile(optimizer=SGDW(lr=1e-4, weight_decay=1e-5, momentum=0.9),
-                      loss='categorical_crossentropy',
-                      metrics=['categorical_accuracy'])
-        model.load_weights('/media/jakep/Elements/document_weights/30693/cp-0022.ckpt')
 
     #Load data for test
     ip_img_cols = config['ip_img_cols']
@@ -69,10 +56,24 @@ if __name__ == '__main__':
         preprocessing_function=preprocess_input_resnet,
         target_size=(ip_img_rows, ip_img_cols),
         batch_size=batch_size,
-        horizontal_flip=False
+        horizontal_flip=False,
+        shuffle=False
     )
     steps = len(test_gen)
     test_gen = center_crop(test_gen, ip_img_rows, ip_img_cols, nw_img_cols)
+
+    model = ResNet152(
+        use_bias=True,
+        model_name='resnet152',
+        input_shape=(nw_img_rows, nw_img_cols, 3),
+        pooling='avg',
+        classes=classes
+    )
+    model.compile(optimizer=SGDW(lr=1e-5, weight_decay=1e-5, momentum=0.9),
+                  loss='categorical_crossentropy',
+                  metrics=['categorical_accuracy'])
+
+    model.load_weights('/home/ddot/document/clef16/weights/38452/cp-0110.ckpt')
 
     #test
     predict = model.evaluate(test_gen, steps=steps, verbose=1)
