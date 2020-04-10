@@ -67,6 +67,7 @@ if __name__ == '__main__':
 
 
     #Load model with model hyperparameters
+    batch_size = config['batch_size']
     classes = config['classes']
     nw_img_cols = config['nw_img_cols']
     nw_img_rows = config['nw_img_rows']
@@ -79,12 +80,12 @@ if __name__ == '__main__':
             input_shape=(nw_img_rows, nw_img_cols, 3),
             pooling='avg',
             classes=classes,
-            pth_hist=HISTORY
+            pth_hist=HISTORY,
+            batch_size=batch_size
             )
         model.compile(optimizer=SGDW(lr=1e-5, weight_decay=1e-6, momentum=0.9),
                       loss='categorical_crossentropy',
                       metrics=['categorical_accuracy'])
-        model.load_weights('/home/ddot/document/clef16/weights/53894/cp-0120.ckpt')
     print('Model compiled')
     with open(os.path.join(HISTORY, 'model_summary.txt'), 'w') as f:
         with redirect_stdout(f):
@@ -101,10 +102,11 @@ if __name__ == '__main__':
         preprocessing_function=preprocess_input_resnet,
         target_size=(ip_img_rows, ip_img_cols),
         batch_size=batch_size,
+        shuffle=True,
         horizontal_flip=False
     )
     steps_per_epoch = len(train_gen)
-    train_gen = center_crop(train_gen, ip_img_rows, ip_img_cols, nw_img_cols)
+    train_gen = center_crop(train_gen, ip_img_rows, ip_img_cols, nw_img_cols, batch_size)
     print('\n')
 
     #Load data for validation
@@ -114,11 +116,11 @@ if __name__ == '__main__':
         in_dir=VALID,
         preprocessing_function=preprocess_input_resnet,
         target_size=(ip_img_rows, ip_img_cols),
-        batch_size=batch_size,
+        batch_size=2,
         horizontal_flip=False
     )
     steps = len(valid_gen)
-    valid_gen = center_crop(valid_gen, ip_img_rows, ip_img_cols, nw_img_cols)
+    valid_gen = center_crop(valid_gen, ip_img_rows, ip_img_cols, nw_img_cols, 2)
     print('\n')
     print('Model input image resolution: ' + str(nw_img_cols) + 'x' + str(nw_img_cols))
     print('Model input batch_size: ' + str(batch_size))
@@ -141,7 +143,7 @@ if __name__ == '__main__':
         epochs=epochs,
         steps_per_epoch=steps_per_epoch,
         verbose=1,
-        callbacks=[cp_callback, ValidationCallback((valid_gen, steps))]
+        callbacks=[cp_callback]
     )
     np.savez(
         os.path.join(HISTORY, 'history.npy'),

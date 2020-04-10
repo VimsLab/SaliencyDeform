@@ -38,7 +38,7 @@ from tensorflow.keras import Model, Sequential
 if __name__ == '__main__':
     #Set up tensorflow envirornment
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-    os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
+    os.environ["CUDA_VISIBLE_DEVICES"] = "1"
     os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
     print('Tensorflow version: {0}'.format(tf.__version__))
     print('Tensorflow addons version: {0}'.format(tfa.__version__))
@@ -48,6 +48,7 @@ if __name__ == '__main__':
     nw_img_cols = config['nw_img_cols']
     nw_img_rows = config['nw_img_rows']
     classes = config['classes']
+    batch_size = config['batch_size']
     mirrored_strategy = tf.distribute.MirroredStrategy()
     with mirrored_strategy.scope():
         model = ResNet152(
@@ -55,18 +56,25 @@ if __name__ == '__main__':
             model_name='resnet152',
             input_shape=(nw_img_rows, nw_img_cols, 3),
             pooling='avg',
-            classes=classes)
+            classes=classes,
+            batch_size=batch_size)
         model.compile(optimizer=SGDW(lr=1e-5, weight_decay=1e-5, momentum=0.9),
                       loss='categorical_crossentropy',
                       metrics=['categorical_accuracy'])
-        model.load_weights('/home/ddot/document/clef16/weights/38452/cp-0110.ckpt').expect_partial()
+        model.load_weights('/media/jakep/Elements/document_weights/26687/cp-0010.ckpt').expect_partial()
 
-    visualize_layers_at = [0,1,2, 3, 4, 5, 6,7,8,9]
+    layer_names = ['norm_x2', 'retarget_2']
+    visualize_layers_at = []
+
+    for index, layer in enumerate(model.layers):
+        if layer.name in layer_names:
+            visualize_layers_at.append(index)
+    # print(visualize_layers_at)
+    # import pdb; pdb.set_trace()
     for visualize_layer_at in visualize_layers_at:
         #Load data for visualization
         ip_img_cols = config['ip_img_cols']
         ip_img_rows = config['ip_img_rows']
-        batch_size = config['batch_size']
         VISUALIZE = os.path.join(pth_data, 'viz')
         visual_gen = image_data_generator(
             in_dir=VISUALIZE,
@@ -77,20 +85,16 @@ if __name__ == '__main__':
             shuffle=False
         )
         steps = len(visual_gen)
-        visual_gen = center_crop(visual_gen, ip_img_rows, ip_img_cols, nw_img_cols)
+        print(steps)
+        visual_gen = center_crop(visual_gen, ip_img_rows, ip_img_cols, nw_img_cols, batch_size)
 
         layer_name = model.layers[visualize_layer_at].name
         model_partial = Model(inputs=model.input, outputs=model.layers[visualize_layer_at].output)
-        # print(model_partial.summary())
+        print('Model compiled')
         feature_maps = model_partial.predict(visual_gen, steps=steps)
         print(feature_maps.shape)
         print('Predicted')
-        if feature_maps.shape[3] > 64:
-            channels = feature_maps.shape[3]//64
-        elif feature_maps.shape[3] == 64:
-            channels = feature_maps.shape[3]//16
-        else:
-            channels = feature_maps.shape[3]
+        channels = 9
         visualize_feature_maps(
             num_img=20,
             layer_index=visualize_layer_at,

@@ -3,8 +3,8 @@ import numpy as np
 from tensorflow.keras.layers import Input, Layer, Dense, SeparableConv2D, DepthwiseConv2D, GlobalMaxPooling2D, Conv2D, BatchNormalization, MaxPooling2D, AveragePooling2D, ZeroPadding2D, Dropout, Flatten, Add, Reshape, Activation, Lambda, GlobalAveragePooling2D
 from tensorflow.keras import Model, utils
 from tensorflow.keras.utils import plot_model
-from batch_deform import BatchRetarget
-from normalize import Normalize
+from deform import Retarget
+from normalize import Normalize, Invert, GausBlur
 from saliency import SpectralSaliency, MergeSaliency, AddChannels
 
 import math
@@ -74,24 +74,12 @@ def stack1(x, filters, blocks, stride1=2, name=None):
     # Returns
         Output tensor for the stacked blocks.
     """''
-    # if name == 'conv3':
-    #     k3 = 3
-    #     stride3 = get_conv_stride_size(x, 31, k3)
-    #     # x_salient_nw_3 = salient_fn(x, k3, stride3, '3')
-    #     # x_salient_nw_3_norm = Normalize()(x_salient_nw_3)
-    #     x_salient_spectral_3 = SpectralSaliency()(x)
-    #     x_salient_spectral_3 = SeparableConv2D(1, k3, stride3, use_bias = True, padding = 'VALID', activation = 'relu')(x_salient_spectral_3)
-    #     x_salient_spectral_norm_3 = Normalize()(x_salient_spectral_3)
-    #     # x_salient_merged_3 = MergeSaliency()([x_salient_nw_3_norm, x_salient_spectral_norm_3])
-    #     x = BatchRetarget(name = 'retarget_3')([x, x_salient_spectral_norm_3])
     # if name == 'conv4':
-    #     x_salient_nw_4 = salient_fn(x, '4')
-    #     x_salient_nw_4_norm = Normalize()(x_salient_nw_4)
-    #     x_salient_spectral_4 = SpectralSaliency()(x)
-    #     x_salient_spectral_norm_4 = Normalize()(x_salient_spectral_4)
-    #     x_salient_spectral_norm_4 = DepthwiseConv2D(3,padding = 'same', depth_multiplier = x_salient_spectral_norm_4.shape[3])(x_salient_spectral_norm_4)
-    #     x_salient_merged_4 = MergeSaliency()([x_salient_nw_4_norm, x_salient_spectral_norm_4])
-    #     x = BatchRetarget(name = 'retarget_4')([x, x_salient_merged_4])
+    #     norm_x1 = Normalize(name = 'norm_x1')(x)
+    #     x = Retarget(name = 'retarget_1')([x, norm_x1])
+    # if name == 'conv5':
+    #     norm_x1 = Normalize(name = 'norm_x1')(x)
+    #     x = Retarget(name = 'retarget_1')([x, norm_x1])
     x = block1(x, filters, stride=stride1, name=name + '_block1')
     for i in range(2, blocks + 1):
         x = block1(x, filters, conv_shortcut=False, name=name + '_block' + str(i))
@@ -129,7 +117,8 @@ def ResNet152(
         input_shape=(224, 224, 3),
         pooling='avg',
         classes=1000,
-        pth_hist=None
+        pth_hist=None,
+        batch_size = 16
     ):
     """Instantiates the ResNet, ResNetV2, and ResNeXt architecture.
     Optionally loads weights pre-trained on ImageNet.
@@ -163,25 +152,22 @@ def ResNet152(
     """
 
     bn_axis = 3
-    img_input = Input(shape=input_shape)
-    x = SpectralSaliency()(img_input)
-    x = AddChannels()(x)
-    x = Normalize()(x)
-    # x = SeparableConv2D(1, 3, 1, use_bias=True, padding='VALID', activation='relu')(x)
-    x = BatchRetarget(name = 'retarget_1')([img_input, x])
-    x = ZeroPadding2D(padding=((3, 3), (3, 3)), name='conv1_pad')(x)
+    img_input = Input(shape=input_shape, batch_size = batch_size)
+    x = ZeroPadding2D(padding=((3, 3), (3, 3)), name='conv1_pad')(img_input)
     x = Conv2D(64, 7, strides=2, use_bias=use_bias, name='conv1_conv')(x)
     x = BatchNormalization(axis=bn_axis, epsilon=1.001e-5,
                                   name='conv1_bn')(x)
     x = Activation('relu', name='conv1_relu')(x)
-    # xs2 = SpectralSaliency(name = 's2')(x)
-    # xs2 = AddChannels(name = 'a2')(xs2)
-    # xs2 = Normalize(name = 'n2')(xs2)
-    # x = BatchRetarget(name = 'retarget_2')([x, xs2])
     x = ZeroPadding2D(padding=((1, 1), (1, 1)), name='pool1_pad')(x)
     x = MaxPooling2D(3, strides=2, name='pool1_pool', padding = 'SAME')(x)
     x = stack_fn(x)
     if pooling == 'avg':
+        saliency = DepthwiseConv2D(kernel_size=3, strides=1, padding ='same', name='dept_conv_saliency1', activation = 'relu')(x)
+        saliency = DepthwiseConv2D(kernel_size=3, strides=1, padding ='same', name='dept_conv_saliency2', activation = 'relu')(saliency)
+        saliency = DepthwiseConv2D(kernel_size=3, strides=1, padding ='same', name='dept_conv_saliency3', activation = 'relu')(saliency)
+        saliency = DepthwiseConv2D(kernel_size=3, strides=1, padding ='same', name='dept_conv_saliency4', activation = 'relu')(saliency)
+        norm_x1 = Normalize(name = 'norm_x2')(saliency)
+        x = Retarget(name = 'retarget_2')([x, norm_x1])
         x = GlobalAveragePooling2D(name='avg_pool')(x)
     elif pooling == 'max':
         x = GlobalMaxPooling2D(name='max_pool')(x)

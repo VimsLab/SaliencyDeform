@@ -55,26 +55,25 @@ if __name__ == '__main__':
         in_dir=TEST,
         preprocessing_function=preprocess_input_resnet,
         target_size=(ip_img_rows, ip_img_cols),
-        batch_size=batch_size,
+        batch_size=2,
         horizontal_flip=False,
         shuffle=False
     )
     steps = len(test_gen)
-    test_gen = center_crop(test_gen, ip_img_rows, ip_img_cols, nw_img_cols)
-
+    test_gen = center_crop(test_gen, ip_img_rows, ip_img_cols, nw_img_cols, 2)
     model = ResNet152(
         use_bias=True,
         model_name='resnet152',
         input_shape=(nw_img_rows, nw_img_cols, 3),
         pooling='avg',
-        classes=classes
+        classes=classes,
+        batch_size=2,
     )
     model.compile(optimizer=SGDW(lr=1e-5, weight_decay=1e-5, momentum=0.9),
                   loss='categorical_crossentropy',
                   metrics=['categorical_accuracy'])
 
-    model.load_weights('/home/ddot/document/clef16/weights/38452/cp-0110.ckpt')
-
-    #test
+    model.load_weights('/media/jakep/Elements/document_weights/65402/cp-0020.ckpt')
+    # model.load_weights('/media/jakep/Elements/document_weights/57250/cp-0200.ckpt')
     predict = model.evaluate(test_gen, steps=steps, verbose=1)
     print(predict)

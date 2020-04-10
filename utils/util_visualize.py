@@ -9,7 +9,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
 import tensorflow as tf
-matplotlib.use('TkAgg')
 cycol = cycle('bgrcmk')
 
 def visualize_feature_maps(
@@ -35,6 +34,8 @@ def visualize_feature_maps(
     if not visualize:
         RESULTS = os.path.join('./results', str(layer_index))
         os.mkdir(RESULTS)
+    else:
+        matplotlib.use('TkAgg')
 
     for img in range(0, num_img, 1):
         fig = plt.figure()
