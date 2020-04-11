@@ -61,7 +61,7 @@ Returns
 - y_grids: tensor of shape (B, H, W, C)
 '''
 def create_grid_4d(x):
-    grid_size = (x.shape[1])*8
+    grid_size = (x.shape[1])*4
     padding_size = 3
     global_size = grid_size + 2 * padding_size
     batch_size = x.shape[0]
@@ -213,8 +213,11 @@ def nnei(img, x, y):
     x = 0.5 * ((x + 1.0) * tf.cast(max_x-1, 'float32'))
     y = 0.5 * ((y + 1.0) * tf.cast(max_y-1, 'float32'))
 
-    xs = tf.cast(tf.math.floor(x+0.5), tf.int32)
-    ys = tf.cast(tf.math.floor(y+0.5), tf.int32)
+    xs = tf.cast(tf.math.floor(x), tf.int32)
+    ys = tf.cast(tf.math.floor(y), tf.int32)
 
     Ia = get_pixel_value_4d(img, xs, ys)
+    ones = tf.ones([img.shape[0], img.shape[1], img.shape[2], img.shape[3]])
+    Ia = tf.add_n([ones*Ia])
+
     return Ia

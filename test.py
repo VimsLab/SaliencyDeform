@@ -73,7 +73,11 @@ if __name__ == '__main__':
                   loss='categorical_crossentropy',
                   metrics=['categorical_accuracy'])
 
-    model.load_weights('/media/jakep/Elements/document_weights/65402/cp-0020.ckpt')
-    # model.load_weights('/media/jakep/Elements/document_weights/57250/cp-0200.ckpt')
+
+    # model.load_weights('/media/jakep/Elements/document_weights/13662/cp-0025.ckpt')
+    # model.load_weights('/media/jakep/Elements/document_weights/65402/cp-0029.ckpt')
+    model.load_weights('/media/jakep/Elements/document_weights/76659/cp-0250.ckpt')
+    # model.load_weights('/media/jakep/Elements/document_weights/57250/cp-0250.ckpt')
+
     predict = model.evaluate(test_gen, steps=steps, verbose=1)
     print(predict)

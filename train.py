@@ -58,11 +58,11 @@ if __name__ == '__main__':
         os.mkdir(WEIGHTS)
     else:
         raise ValueError('Directory with the same name already exists!')
+    print('Model weights for this run saved at: {0}'.format(WEIGHTS))
     if not os.path.exists(HISTORY):
         os.mkdir(HISTORY)
     else:
         raise ValueError('Directory with the same name already exists!')
-    print('Weights for this run saved at: {0}'.format(WEIGHTS))
     print('Model Summary and training history for this run saved at: {0}'.format(HISTORY))
 
 
@@ -86,6 +86,7 @@ if __name__ == '__main__':
         model.compile(optimizer=SGDW(lr=1e-5, weight_decay=1e-6, momentum=0.9),
                       loss='categorical_crossentropy',
                       metrics=['categorical_accuracy'])
+
     print('Model compiled')
     with open(os.path.join(HISTORY, 'model_summary.txt'), 'w') as f:
         with redirect_stdout(f):

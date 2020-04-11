@@ -38,7 +38,7 @@ from tensorflow.keras import Model, Sequential
 if __name__ == '__main__':
     #Set up tensorflow envirornment
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-    os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+    os.environ["CUDA_VISIBLE_DEVICES"] = '1'
     os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
     print('Tensorflow version: {0}'.format(tf.__version__))
     print('Tensorflow addons version: {0}'.format(tfa.__version__))
@@ -61,9 +61,17 @@ if __name__ == '__main__':
         model.compile(optimizer=SGDW(lr=1e-5, weight_decay=1e-5, momentum=0.9),
                       loss='categorical_crossentropy',
                       metrics=['categorical_accuracy'])
-        model.load_weights('/media/jakep/Elements/document_weights/26687/cp-0010.ckpt').expect_partial()
+        model.load_weights('/media/jakep/Elements/document_weights/76956/cp-0001.ckpt').expect_partial()
 
-    layer_names = ['norm_x2', 'retarget_2']
+    layer_names = [
+        'conv2_block3_out',
+        'normalize_conv3',
+        'retarget_conv3',
+        'blur_conv3',
+        'depthwise_conv_0_conv3',
+        'depthwise_conv_1_conv3',
+        'depthwise_conv_2_conv3'
+    ]
     visualize_layers_at = []
 
     for index, layer in enumerate(model.layers):

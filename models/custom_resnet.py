@@ -3,7 +3,7 @@ import numpy as np
 from tensorflow.keras.layers import Input, Layer, Dense, SeparableConv2D, DepthwiseConv2D, GlobalMaxPooling2D, Conv2D, BatchNormalization, MaxPooling2D, AveragePooling2D, ZeroPadding2D, Dropout, Flatten, Add, Reshape, Activation, Lambda, GlobalAveragePooling2D
 from tensorflow.keras import Model, utils
 from tensorflow.keras.utils import plot_model
-from deform import Retarget
+from deform_new import Retarget
 from normalize import Normalize, Invert, GausBlur
 from saliency import SpectralSaliency, MergeSaliency, AddChannels
 
@@ -74,12 +74,26 @@ def stack1(x, filters, blocks, stride1=2, name=None):
     # Returns
         Output tensor for the stacked blocks.
     """''
-    # if name == 'conv4':
-    #     norm_x1 = Normalize(name = 'norm_x1')(x)
-    #     x = Retarget(name = 'retarget_1')([x, norm_x1])
-    # if name == 'conv5':
-    #     norm_x1 = Normalize(name = 'norm_x1')(x)
-    #     x = Retarget(name = 'retarget_1')([x, norm_x1])
+    if name == 'conv3':
+        for index in range(3):
+            if index < 1:
+                saliency = DepthwiseConv2D(
+                    kernel_size=3,
+                    strides=1,
+                    padding='valid',
+                    name='depthwise_conv_' + str(index) + '_' + name,
+                    activation='relu')(x)
+            else:
+                saliency = DepthwiseConv2D(
+                    kernel_size=3,
+                    strides=1,
+                    padding='valid',
+                    name='depthwise_conv_' + str(index) + '_' + name,
+                    activation='relu')(saliency)
+
+        normalize = Normalize(name='normalize_' + name)(saliency)
+        blur = GausBlur(name='blur_' + name)(normalize)
+        x = Retarget(name='retarget_' + name)([x, blur])
     x = block1(x, filters, stride=stride1, name=name + '_block1')
     for i in range(2, blocks + 1):
         x = block1(x, filters, conv_shortcut=False, name=name + '_block' + str(i))
@@ -101,14 +115,6 @@ def get_conv_stride_size(x, n_out, k):
     stride =  (n_in - k) / (n_out - 1)
     stride = math.floor(stride)
     return stride
-
-def salient_fn(x, k, stride, block_index):
-    for i in range(5):
-        x = Conv2D(x.shape[3], 3, strides=1, use_bias=True, name = 'saliency_conv_' + str(i) + '_' + block_index, padding = 'SAME')(x)
-        x = Activation('relu', name = 'saliency_conv_' + str(i) + '_' + block_index + '_relu')(x)
-    x = Conv2D(1, k, strides = stride, name = 'saliency' + block_index, use_bias=False, padding = 'VALID', activation = 'relu')(x)
-    return x
-
 
 def ResNet152(
         use_bias=True,
@@ -162,12 +168,6 @@ def ResNet152(
     x = MaxPooling2D(3, strides=2, name='pool1_pool', padding = 'SAME')(x)
     x = stack_fn(x)
     if pooling == 'avg':
-        saliency = DepthwiseConv2D(kernel_size=3, strides=1, padding ='same', name='dept_conv_saliency1', activation = 'relu')(x)
-        saliency = DepthwiseConv2D(kernel_size=3, strides=1, padding ='same', name='dept_conv_saliency2', activation = 'relu')(saliency)
-        saliency = DepthwiseConv2D(kernel_size=3, strides=1, padding ='same', name='dept_conv_saliency3', activation = 'relu')(saliency)
-        saliency = DepthwiseConv2D(kernel_size=3, strides=1, padding ='same', name='dept_conv_saliency4', activation = 'relu')(saliency)
-        norm_x1 = Normalize(name = 'norm_x2')(saliency)
-        x = Retarget(name = 'retarget_2')([x, norm_x1])
         x = GlobalAveragePooling2D(name='avg_pool')(x)
     elif pooling == 'max':
         x = GlobalMaxPooling2D(name='max_pool')(x)
