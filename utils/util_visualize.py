@@ -1,10 +1,9 @@
 '''
-Utility functions to visualize feature_maps and input data to a model
+This module contains functions to visualize feature_maps and input data to a model for sanity check
 '''
 import os
 import math
 from itertools import cycle
-import random
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
@@ -17,11 +16,23 @@ def visualize_feature_maps(
         layer_name='input',
         channels=3,
         feature_maps=[],
-        visualize=True
+        visualize=True,
+        VISUAL=None
     ):
     '''
-    Visualize feature map channels per batch.
-    Few channels at the end would be discarded if square root of channels is not a whole number.
+    Description
+    -----------
+    Visualize feature map for specified number channels for all images
+
+    Args
+    ----
+    num_img: total number of images
+    layer_index: index number of the layer
+    layer_name: name of the layer
+    channels: number of channels
+    feature_maps: feature_maps of shape (B, H, W, C)
+    visualize: If true feature maps are visualized
+    VISUAL: If visualize is false, path where visualized results will be saved
     '''
     if feature_maps == []:
         raise ValueError('Feature maps cannot be of NoneType.')
@@ -32,11 +43,12 @@ def visualize_feature_maps(
         grid_size += 1
 
     if not visualize:
-        RESULTS = os.path.join('./results', str(layer_index))
-        os.mkdir(RESULTS)
+        VISUAL = os.path.join(VISUAL, str(layer_index))
+        os.mkdir(VISUAL)
     else:
+        #Faster
         matplotlib.use('TkAgg')
-
+    print(VISUAL)
     for img in range(0, num_img, 1):
         fig = plt.figure()
         for channel in range(1, channels + 1, 1):
@@ -48,9 +60,9 @@ def visualize_feature_maps(
             plt.show()
             plt.close()
         else:
-            fig.savefig(os.path.join(RESULTS, str(img) + '_' + layer_name + '.png'))
-            print('Saved')
+            fig.savefig(os.path.join(VISUAL, str(img) + '_' + layer_name + '.png'))
             plt.close()
+            print('Saved')
 
 
 def check_loaded_data(
@@ -59,7 +71,15 @@ def check_loaded_data(
         grid_size=64
     ):
     '''
-    Check labels for input images
+    Description
+    -----------
+    Sanity check function to check images before training, validation or testing
+
+    Args
+    ----
+    imgs: images of shape (B, H, W, C)
+    lbls: corresponding label of an image in one hot format
+    grid_size: sample size from the total number of the images in the entire data set
     '''
     if imgs == [] or lbls == []:
         raise ValueError('Images or labels cannot be empty.')

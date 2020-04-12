@@ -1,13 +1,14 @@
+'''
+Custom ResNet Model.
+Pretrained Model at: https://github.com/keras-team/keras-applications/tree/master/keras_applications
+'''
 import os
 import numpy as np
 from tensorflow.keras.layers import Input, Layer, Dense, SeparableConv2D, DepthwiseConv2D, GlobalMaxPooling2D, Conv2D, BatchNormalization, MaxPooling2D, AveragePooling2D, ZeroPadding2D, Dropout, Flatten, Add, Reshape, Activation, Lambda, GlobalAveragePooling2D
 from tensorflow.keras import Model, utils
 from tensorflow.keras.utils import plot_model
-from deform_new import Retarget
-from normalize import Normalize, Invert, GausBlur
-from saliency import SpectralSaliency, MergeSaliency, AddChannels
-
-import math
+from retarget import Retarget
+from model_helpers import Normalize, Invert, GausBlur
 
 BASE_WEIGHTS_PATH = (
     'https://github.com/keras-team/keras-applications/'
@@ -74,30 +75,29 @@ def stack1(x, filters, blocks, stride1=2, name=None):
     # Returns
         Output tensor for the stacked blocks.
     """''
-    if name == 'conv3':
+    if name == 'conv5':
         for index in range(3):
             if index < 1:
                 saliency = DepthwiseConv2D(
                     kernel_size=3,
                     strides=1,
-                    padding='valid',
+                    padding='same',
                     name='depthwise_conv_' + str(index) + '_' + name,
                     activation='relu')(x)
             else:
                 saliency = DepthwiseConv2D(
                     kernel_size=3,
                     strides=1,
-                    padding='valid',
+                    padding='same',
                     name='depthwise_conv_' + str(index) + '_' + name,
                     activation='relu')(saliency)
-
         normalize = Normalize(name='normalize_' + name)(saliency)
-        blur = GausBlur(name='blur_' + name)(normalize)
-        x = Retarget(name='retarget_' + name)([x, blur])
+        x = Retarget(name='retarget_' + name)([x, normalize])
     x = block1(x, filters, stride=stride1, name=name + '_block1')
     for i in range(2, blocks + 1):
         x = block1(x, filters, conv_shortcut=False, name=name + '_block' + str(i))
     return x
+
 
 '''
 stack_fn: a function that returns output tensor for the
@@ -109,12 +109,6 @@ def stack_fn(x):
     x = stack1(x, 256, 36, stride1=2, name='conv4')#2
     x = stack1(x, 512, 3, stride1=2, name='conv5')
     return x
-
-def get_conv_stride_size(x, n_out, k):
-    n_in = x.shape[1]
-    stride =  (n_in - k) / (n_out - 1)
-    stride = math.floor(stride)
-    return stride
 
 def ResNet152(
         use_bias=True,

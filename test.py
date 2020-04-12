@@ -11,13 +11,11 @@ pth_data = config['pth_data']
 pth_utils = config['pth_utils']
 pth_models = config['pth_models']
 pth_weights = config['pth_weights']
-pth_hist = config['pth_hist']
 pths_import = [
     pth_data,
     pth_utils,
     pth_models,
     pth_weights,
-    pth_hist
 ]
 for pth_import in pths_import:
     if pth_import not in sys.path:
@@ -41,10 +39,25 @@ if __name__ == '__main__':
     print('Tensorflow addons version: {0}'.format(tfa.__version__))
     print("Num GPUs Used: {0}".format(len(tf.config.experimental.list_physical_devices('GPU'))))
 
-    #Load model with model hyperparameters
+    #Load and compile model. Model must be the same as the one used for training
     nw_img_cols = config['nw_img_cols']
     nw_img_rows = config['nw_img_rows']
     classes = config['classes']
+    run = '79836'
+    weight_name = '/media/jakep/Elements/document_weights/{0}/cp-0001.ckpt'.format(run)
+    model = ResNet152(
+        use_bias=True,
+        model_name='resnet152',
+        input_shape=(nw_img_rows, nw_img_cols, 3),
+        pooling='avg',
+        classes=classes,
+        batch_size=2,
+    )
+    model.compile(optimizer=SGDW(lr=1e-5, weight_decay=1e-5, momentum=0.9),
+                  loss='categorical_crossentropy',
+                  metrics=['categorical_accuracy'])
+
+    model.load_weights(weight_name)
 
     #Load data for test
     ip_img_cols = config['ip_img_cols']
@@ -61,23 +74,5 @@ if __name__ == '__main__':
     )
     steps = len(test_gen)
     test_gen = center_crop(test_gen, ip_img_rows, ip_img_cols, nw_img_cols, 2)
-    model = ResNet152(
-        use_bias=True,
-        model_name='resnet152',
-        input_shape=(nw_img_rows, nw_img_cols, 3),
-        pooling='avg',
-        classes=classes,
-        batch_size=2,
-    )
-    model.compile(optimizer=SGDW(lr=1e-5, weight_decay=1e-5, momentum=0.9),
-                  loss='categorical_crossentropy',
-                  metrics=['categorical_accuracy'])
-
-
-    # model.load_weights('/media/jakep/Elements/document_weights/13662/cp-0025.ckpt')
-    # model.load_weights('/media/jakep/Elements/document_weights/65402/cp-0029.ckpt')
-    model.load_weights('/media/jakep/Elements/document_weights/76659/cp-0250.ckpt')
-    # model.load_weights('/media/jakep/Elements/document_weights/57250/cp-0250.ckpt')
-
     predict = model.evaluate(test_gen, steps=steps, verbose=1)
     print(predict)
