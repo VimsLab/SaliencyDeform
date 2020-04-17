@@ -6,6 +6,7 @@ import tensorflow as tf
 from tensorflow.keras.layers import Layer
 from tensorflow.keras import Model
 
+
 class Retarget(Layer):
     '''
     Custom layer that retargets the innermost 2 dimensions of eature maps
@@ -91,7 +92,7 @@ def create_grid_4d(x):
     - y_grids: tensor of shape (B, H, W, C)
     '''
     # this is a hyperparameter. Increasing it increases compute cost but lowers the zoom
-    grid_size = x.shape[1]*4
+    grid_size = x.shape[1]*2
     # keep padding size low to keep area around zoom low
     padding_size = 3
     global_size = grid_size + 2 * padding_size

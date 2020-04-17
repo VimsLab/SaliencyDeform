@@ -84,7 +84,7 @@ if __name__ == '__main__':
         pth_hist=HISTORY,
         batch_size=batch_size
     )
-    model.compile(optimizer=SGDW(lr=1e-5, weight_decay=1e-6, momentum=0.9),
+    model.compile(optimizer=SGDW(lr=1e-4, weight_decay=1e-6, momentum=0.9),
                   loss='categorical_crossentropy',
                   metrics=['categorical_accuracy'])
     print('Model compiled')

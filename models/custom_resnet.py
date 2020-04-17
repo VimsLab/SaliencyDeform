@@ -4,6 +4,7 @@ Pretrained Model at: https://github.com/keras-team/keras-applications/tree/maste
 '''
 import os
 import numpy as np
+import tensorflow
 from tensorflow.keras.layers import Input, Layer, Dense, SeparableConv2D, DepthwiseConv2D, GlobalMaxPooling2D, Conv2D, BatchNormalization, MaxPooling2D, AveragePooling2D, ZeroPadding2D, Dropout, Flatten, Add, Reshape, Activation, Lambda, GlobalAveragePooling2D
 from tensorflow.keras import Model, utils
 from tensorflow.keras.utils import plot_model
@@ -75,22 +76,28 @@ def stack1(x, filters, blocks, stride1=2, name=None):
     # Returns
         Output tensor for the stacked blocks.
     """''
-    if name == 'conv5':
-        for index in range(3):
+    if name == 'conv3' or name == 'conv4' or name == 'conv5':
+        for index in range(1):
             if index < 1:
                 saliency = DepthwiseConv2D(
                     kernel_size=3,
                     strides=1,
                     padding='same',
                     name='depthwise_conv_' + str(index) + '_' + name,
-                    activation='relu')(x)
+                    activation='relu',
+                    depthwise_initializer=tensorflow.keras.initializers.Ones(),
+                    bias_initializer='zeros'
+                    )(x)
             else:
                 saliency = DepthwiseConv2D(
                     kernel_size=3,
                     strides=1,
                     padding='same',
                     name='depthwise_conv_' + str(index) + '_' + name,
-                    activation='relu')(saliency)
+                    activation='relu',
+                    depthwise_initializer=tensorflow.keras.initializers.Ones(),
+                    bias_initializer='zeros'
+                    )(saliency)
         normalize = Normalize(name='normalize_' + name)(saliency)
         x = Retarget(name='retarget_' + name)([x, normalize])
     x = block1(x, filters, stride=stride1, name=name + '_block1')
@@ -162,6 +169,30 @@ def ResNet152(
     x = MaxPooling2D(3, strides=2, name='pool1_pool', padding = 'SAME')(x)
     x = stack_fn(x)
     if pooling == 'avg':
+        name = 'avg_pool'
+        for index in range(1):
+            if index < 1:
+                saliency = DepthwiseConv2D(
+                    kernel_size=3,
+                    strides=1,
+                    padding='same',
+                    name='depthwise_conv_' + str(index) + '_' + name,
+                    activation='relu',
+                    depthwise_initializer=tensorflow.keras.initializers.Ones(),
+                    bias_initializer='zeros'
+                    )(x)
+            else:
+                saliency = DepthwiseConv2D(
+                    kernel_size=3,
+                    strides=1,
+                    padding='same',
+                    name='depthwise_conv_' + str(index) + '_' + name,
+                    activation='relu',
+                    depthwise_initializer=tensorflow.keras.initializers.Zeros(),
+                    bias_initializer='zeros'
+                    )(saliency)
+        normalize = Normalize(name='normalize_' + name)(saliency)
+        x = Retarget(name='retarget_' + name)([x, normalize])
         x = GlobalAveragePooling2D(name='avg_pool')(x)
     elif pooling == 'max':
         x = GlobalMaxPooling2D(name='max_pool')(x)

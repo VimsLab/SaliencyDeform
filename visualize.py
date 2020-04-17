@@ -23,6 +23,7 @@ for pth_import in pths_import:
         sys.path.append(pth_import)
 
 from custom_resnet import ResNet152
+
 from load_data import image_data_generator
 from preprocess import center_crop
 from util_visualize import visualize_feature_maps
@@ -47,8 +48,10 @@ if __name__ == '__main__':
     nw_img_rows = config['nw_img_rows']
     classes = config['classes']
     batch_size = config['batch_size']
-    run = '79836'
-    weight_name = '/media/jakep/Elements/document_weights/{0}/cp-0001.ckpt'.format(run)
+    # run = '41694'
+    run = '38822'
+
+    weight_name = os.path.join(pth_weights,'{0}/cp-0001.ckpt'.format(run))
     model = ResNet152(
         use_bias=True,
         model_name='resnet152',
@@ -63,12 +66,22 @@ if __name__ == '__main__':
 
     #name of layers to be visualized
     layer_names = {
+        'conv2_block3_out',
+        'depthwise_conv_0_conv3',
+        'normalize_conv3',
+        'retarget_conv3',
         'conv4_block36_out',
         'normalize_conv5',
         'retarget_conv5',
-        'depthwise_conv_2_conv5',
-        'depthwise_conv_1_conv5',
         'depthwise_conv_0_conv5',
+        'conv3_block8_out',
+        'depthwise_conv_0_conv4',
+        'normalize_conv4',
+        'retarget_conv4',
+        'conv5_block3_out',
+        'depthwise_conv_0_avg_pool',
+        'normalize_avg_pool',
+        'retarget_avg_pool'
     }
     visualize_layers_at = []
     for index, layer in enumerate(model.layers):

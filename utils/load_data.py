@@ -45,13 +45,12 @@ def load_data_categorical(
             path_file = os.path.join(curr_dir, filename)
             img = load_img(path_file, target_size=target_size, interpolation="lanczos")
             img = img_to_array(img)
-            x_values.append(x_values)
-            y_values.append(y_values)
-
-    x_values = np.array(x_values)
-    y_values = np.array(y_values)
+            x_values.append(img)
+            y_values.append(label)
+    x_values = np.array(x_values).astype('float32')
+    y_values = np.array(y_values).astype('float32')
     #Convert y_values to one hot format
-    y_values = tf.keray.utils.to_categorical(y_values, num_classes)
+    y_values = tf.keras.utils.to_categorical(y_values, num_classes)
     return x_values, y_values
 
 def image_data_generator(
