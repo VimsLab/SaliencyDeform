@@ -76,8 +76,8 @@ def stack1(x, filters, blocks, stride1=2, name=None):
     # Returns
         Output tensor for the stacked blocks.
     """''
-    if name == 'conv3' or name == 'conv4' or name == 'conv5':
-        for index in range(1):
+    if  name == 'conv3' or name == 'conv4' or name =='conv5':
+        for index in range(3):
             if index < 1:
                 saliency = DepthwiseConv2D(
                     kernel_size=3,
@@ -161,6 +161,31 @@ def ResNet152(
     bn_axis = 3
     img_input = Input(shape=input_shape, batch_size = batch_size)
     x = ZeroPadding2D(padding=((3, 3), (3, 3)), name='conv1_pad')(img_input)
+    # name = 'conv1_pad'
+    # for index in range(3):
+    #     if index < 1:
+    #         saliency = DepthwiseConv2D(
+    #             kernel_size=3,
+    #             strides=1,
+    #             padding='same',
+    #             name='depthwise_conv_' + str(index) + '_' + name,
+    #             activation='relu',
+    #             depthwise_initializer=tensorflow.keras.initializers.Ones(),
+    #             bias_initializer='zeros'
+    #             )(x)
+    #     else:
+    #         saliency = DepthwiseConv2D(
+    #             kernel_size=3,
+    #             strides=1,
+    #             padding='same',
+    #             name='depthwise_conv_' + str(index) + '_' + name,
+    #             activation='relu',
+    #             depthwise_initializer=tensorflow.keras.initializers.Ones(),
+    #             bias_initializer='zeros'
+    #             )(saliency)
+    # normalize = Normalize(name='normalize_' + name)(saliency)
+    # x = Retarget(name='retarget_' + name)([x, normalize])
+
     x = Conv2D(64, 7, strides=2, use_bias=use_bias, name='conv1_conv')(x)
     x = BatchNormalization(axis=bn_axis, epsilon=1.001e-5,
                                   name='conv1_bn')(x)
@@ -169,30 +194,30 @@ def ResNet152(
     x = MaxPooling2D(3, strides=2, name='pool1_pool', padding = 'SAME')(x)
     x = stack_fn(x)
     if pooling == 'avg':
-        name = 'avg_pool'
-        for index in range(1):
-            if index < 1:
-                saliency = DepthwiseConv2D(
-                    kernel_size=3,
-                    strides=1,
-                    padding='same',
-                    name='depthwise_conv_' + str(index) + '_' + name,
-                    activation='relu',
-                    depthwise_initializer=tensorflow.keras.initializers.Ones(),
-                    bias_initializer='zeros'
-                    )(x)
-            else:
-                saliency = DepthwiseConv2D(
-                    kernel_size=3,
-                    strides=1,
-                    padding='same',
-                    name='depthwise_conv_' + str(index) + '_' + name,
-                    activation='relu',
-                    depthwise_initializer=tensorflow.keras.initializers.Zeros(),
-                    bias_initializer='zeros'
-                    )(saliency)
-        normalize = Normalize(name='normalize_' + name)(saliency)
-        x = Retarget(name='retarget_' + name)([x, normalize])
+        # name = 'avg_pool'
+        # for index in range(1):
+        #     if index < 1:
+        #         saliency = DepthwiseConv2D(
+        #             kernel_size=3,
+        #             strides=1,
+        #             padding='same',
+        #             name='depthwise_conv_' + str(index) + '_' + name,
+        #             activation='relu',
+        #             depthwise_initializer=tensorflow.keras.initializers.Ones(),
+        #             bias_initializer='zeros'
+        #             )(x)
+        #     else:
+        #         saliency = DepthwiseConv2D(
+        #             kernel_size=3,
+        #             strides=1,
+        #             padding='same',
+        #             name='depthwise_conv_' + str(index) + '_' + name,
+        #             activation='relu',
+        #             depthwise_initializer=tensorflow.keras.initializers.Zeros(),
+        #             bias_initializer='zeros'
+        #             )(saliency)
+        # normalize = Normalize(name='normalize_' + name)(saliency)
+        # x = Retarget(name='retarget_' + name)([x, normalize])
         x = GlobalAveragePooling2D(name='avg_pool')(x)
     elif pooling == 'max':
         x = GlobalMaxPooling2D(name='max_pool')(x)

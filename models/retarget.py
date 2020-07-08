@@ -93,6 +93,8 @@ def create_grid_4d(x):
     '''
     # this is a hyperparameter. Increasing it increases compute cost but lowers the zoom
     grid_size = x.shape[1]*2
+    # grid_size = x.shape[1]//2
+
     # keep padding size low to keep area around zoom low
     padding_size = 3
     global_size = grid_size + 2 * padding_size
@@ -243,5 +245,7 @@ def nearest_neighbour_interpolation(feature_maps, x, y):
     wc = (x-x0) * (y1-y)
     wd = (x-x0) * (y-y0)
     #This is the trick. Assume all the neighbours are nearest neighbour
-    out = tf.add_n([wa*Ia, wb*Ia, wc*Ia, wd*Ia])
+    # out = tf.add_n([wa*Ia, wb*Ia, wc*Ia, wd*Ia])
+    out = Ia*tf.add_n([wa, wb, wc, wd])
+
     return out

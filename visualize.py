@@ -48,8 +48,9 @@ if __name__ == '__main__':
     nw_img_rows = config['nw_img_rows']
     classes = config['classes']
     batch_size = config['batch_size']
-    # run = '41694'
-    run = '38822'
+    run = '41694'
+    # run = '29303'
+    # run = '79092'
 
     weight_name = os.path.join(pth_weights,'{0}/cp-0001.ckpt'.format(run))
     model = ResNet152(
@@ -66,22 +67,28 @@ if __name__ == '__main__':
 
     #name of layers to be visualized
     layer_names = {
-        'conv2_block3_out',
-        'depthwise_conv_0_conv3',
-        'normalize_conv3',
-        'retarget_conv3',
+        # 'conv2_block3_out',
+        # 'conv1_pad',
+        # 'depthwise_conv_0_conv1_pad',
+        # 'depthwise_conv_1_conv1_pad',
+        # 'depthwise_conv_2_conv1_pad',
+        # 'normalize_conv1_pad',
+        # 'retarget_conv1_pad',
+        # 'depthwise_conv_0_conv3',
+        # 'normalize_conv3',
+        # 'retarget_conv3',
         'conv4_block36_out',
         'normalize_conv5',
         'retarget_conv5',
-        'depthwise_conv_0_conv5',
-        'conv3_block8_out',
-        'depthwise_conv_0_conv4',
-        'normalize_conv4',
-        'retarget_conv4',
-        'conv5_block3_out',
-        'depthwise_conv_0_avg_pool',
-        'normalize_avg_pool',
-        'retarget_avg_pool'
+        # 'depthwise_conv_0_conv5',
+        # 'conv3_block8_out',
+        # 'depthwise_conv_0_conv4',
+        # 'normalize_conv4',
+        # 'retarget_conv4',
+        # # 'conv5_block3_out',
+        # 'depthwise_conv_0_avg_pool',
+        # 'normalize_avg_pool',
+        # 'retarget_avg_pool'
     }
     visualize_layers_at = []
     for index, layer in enumerate(model.layers):
@@ -107,8 +114,8 @@ if __name__ == '__main__':
         print('Partial model compiled with its last layer {0} compiled'.format(layer_name))
         feature_maps = model_partial.predict(visual_gen, steps=steps)
         print('Predicted')
-        channels = 9
-        num_img = 20
+        channels = 4
+        num_img = feature_maps.shape[0]
         VISUAL = os.path.join(pth_visual, run)
         visualize_feature_maps(
             num_img=num_img,
@@ -116,6 +123,6 @@ if __name__ == '__main__':
             layer_name=layer_name,
             channels=channels,
             feature_maps=feature_maps,
-            visualize=False,
+            visualize=True,
             VISUAL=VISUAL
         )

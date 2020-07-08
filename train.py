@@ -29,7 +29,13 @@ for pth_import in pths_import:
     if pth_import not in sys.path:
         sys.path.append(pth_import)
 #Import model for training
-from custom_resnet import ResNet152
+# from common_resnet import ResNet50, ResNet101,ResNet152
+from custom_common_resnet import ResNet50, ResNet101, ResNet152
+
+# from custom_common_densenet import DenseNet169
+# from common_densenet import DenseNet169
+
+
 from tensorflow.keras.applications.resnet import preprocess_input as preprocess_input_resnet
 #Load data from directory
 from load_data import image_data_generator
@@ -45,7 +51,7 @@ from tensorflow.keras.callbacks import LearningRateScheduler
 if __name__ == '__main__':
     #Set up tensorflow envirornment
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-    os.environ["CUDA_VISIBLE_DEVICES"] = '0'
+    os.environ["CUDA_VISIBLE_DEVICES"] = '1'
     os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
     print('Tensorflow version: {0}'.format(tf.__version__))
     print('Tensorflow addons version: {0}'.format(tfa.__version__))
@@ -75,8 +81,7 @@ if __name__ == '__main__':
     nw_img_cols = config['nw_img_cols']
     nw_img_rows = config['nw_img_rows']
     model = ResNet152(
-        use_bias=True,
-        model_name='resnet152',
+        include_top=False,
         weights='imagenet',
         input_shape=(nw_img_rows, nw_img_cols, 3),
         pooling='avg',
@@ -84,7 +89,8 @@ if __name__ == '__main__':
         pth_hist=HISTORY,
         batch_size=batch_size
     )
-    model.compile(optimizer=SGDW(lr=1e-4, weight_decay=1e-6, momentum=0.9),
+
+    model.compile(optimizer=SGDW(lr=0.0001, weight_decay=1e-6, momentum=0.9),
                   loss='categorical_crossentropy',
                   metrics=['categorical_accuracy'])
     print('Model compiled')
@@ -99,7 +105,9 @@ if __name__ == '__main__':
     batch_size = config['batch_size']
     ip_img_cols = config['ip_img_cols']
     ip_img_rows = config['ip_img_rows']
-    TRAIN = os.path.join(pth_data, 'train')
+
+    TRAIN = os.path.join(pth_data, 'Train')
+
     train_gen = image_data_generator(
         in_dir=TRAIN,
         preprocessing_function=preprocess_input_resnet,
@@ -116,27 +124,6 @@ if __name__ == '__main__':
         width=ip_img_cols,
         crop_length=nw_img_cols,
         batch_size=batch_size
-    )
-    print('\n')
-
-    #Load data for validation
-    print('Validation Data:')
-    VALID = os.path.join(pth_data, 'test')
-    valid_gen = image_data_generator(
-        in_dir=VALID,
-        preprocessing_function=preprocess_input_resnet,
-        target_size=(ip_img_rows, ip_img_cols),
-        batch_size=2,
-        horizontal_flip=False
-    )
-    steps = len(valid_gen)
-    #Center crop images
-    valid_gen = center_crop(
-        generator=valid_gen,
-        height=ip_img_rows,
-        width=ip_img_cols,
-        crop_length=nw_img_cols,
-        batch_size=2
     )
     print('\n')
 

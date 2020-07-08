@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import matplotlib
 import tensorflow as tf
 cycol = cycle('bgrcmk')
+import matplotlib.gridspec as gridspec
 
 def visualize_feature_maps(
         num_img=16,
@@ -51,8 +52,10 @@ def visualize_feature_maps(
     print(VISUAL)
     for img in range(0, num_img, 1):
         fig = plt.figure()
+        gs1 = gridspec.GridSpec(2, 2)
+        gs1.update(wspace=0.025, hspace=0.05) # set the spacing between axes.
         for channel in range(1, channels + 1, 1):
-            axis = fig.add_subplot(math.sqrt(grid_size), math.sqrt(grid_size), channel)
+            axis = fig.add_subplot(gs1[channel])
             axis.set_xticks([])
             axis.set_yticks([])
             axis.imshow(feature_maps[img, :, :, channel - 1], cmap='jet')
