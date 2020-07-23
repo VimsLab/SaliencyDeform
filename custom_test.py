@@ -23,8 +23,9 @@ for pth_import in pths_import:
     if pth_import not in sys.path:
         sys.path.append(pth_import)
 
-from resnet import ResNet152
 # from resnet import ResNet152
+# from resnet import ResNet152
+from custom_common_densenet import DenseNet169
 
 from load_data import load_data_categorical
 from preprocess import center_crop
@@ -34,11 +35,15 @@ import tensorflow_addons as tfa
 from tensorflow.keras.applications.resnet import preprocess_input as preprocess_input_resnet
 from tensorflow_addons.optimizers.weight_decay_optimizers import SGDW
 import tensorflow.keras.backend as K
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.applications.densenet import preprocess_input as preprocess_input_densenet
 
 if __name__ == '__main__':
     #Set up tensorflow envirornment
+    tf.config.experimental_run_functions_eagerly(True)
+
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-    os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+    os.environ["CUDA_VISIBLE_DEVICES"] = "1"
     os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
     print('Tensorflow version: {0}'.format(tf.__version__))
     print('Tensorflow addons version: {0}'.format(tfa.__version__))
@@ -52,6 +57,8 @@ if __name__ == '__main__':
     classes = config['classes']
     ip_img_cols = config['ip_img_cols']
     ip_img_rows = config['ip_img_rows']
+    att_type = config['att_type']
+
     TEST_NPY = os.path.join(pth_data, 'npy')
 
     if os.path.exists(os.path.join(TEST_NPY, 'test_img_' + str(ip_img_rows) + '.npy')):
@@ -81,48 +88,54 @@ if __name__ == '__main__':
     batch_size_test_img = test_img[0:test_img.shape[0]-batch_deficit, :, :, :]
     batch_deficit_test_img = test_img[test_img.shape[0]-batch_deficit: test_img.shape[0], :, :, :]
 
-    for cp_index in range(90, 91):
-        weight_name = os.path.join(pth_weights, '{0}/cp-00{1}.ckpt'.format(run, str(cp_index)))
-        model = None
-        model = ResNet152(
-            use_bias=True,
-            model_name='resnet152',
-            input_shape=(nw_img_rows, nw_img_cols, 3),
-            pooling='avg',
-            classes=classes,
-            batch_size=batch_size,
-        )
-        model.compile(optimizer=SGDW(lr=1e-4, weight_decay=1e-5, momentum=0.9),
-                      loss='categorical_crossentropy',
-                      metrics=['categorical_accuracy'])
+    model = None
+    model = DenseNet169(
+        include_top=False,
+        weights=None,
+        input_shape=(nw_img_rows, nw_img_cols, 3),
+        pooling='avg',
+        classes=classes,
+        batch_size=32,
+        att_type=att_type
+    )
+    # model.compile(optimizer=SGDW(lr=0.0001, weight_decay=1e-6, momentum=0.9),
+    #               loss='categorical_crossentropy',
+    #               metrics=['categorical_accuracy'])
+    model.compile(optimizer=Adam(lr=1e-4, beta_1=0.9, beta_2=0.999),
+                  loss='categorical_crossentropy',
+                  metrics=['categorical_accuracy'])
 
-        model.load_weights(weight_name).expect_partial()
+    model.load_weights(os.path.join(os.path.join('/media/jakep/Elements/ImageCLEF2016_weights/2020-07-20/14433'),'cp-0030.ckpt')).expect_partial()
 
-        predict_batch_size = model.predict(batch_size_test_img, verbose=2)
+    predict_batch_size = model.predict(batch_size_test_img, verbose=2)
 
-        model = ResNet152(
-            use_bias=True,
-            model_name='resnet152',
-            input_shape=(nw_img_rows, nw_img_cols, 3),
-            pooling='avg',
-            classes=classes,
-            batch_size=batch_deficit,
-        )
-        model.compile(optimizer=SGDW(lr=1e-4, weight_decay=1e-5, momentum=0.9),
-                      loss='categorical_crossentropy',
-                      metrics=['categorical_accuracy'])
+    model = DenseNet169(
+        include_top=False,
+        weights=None,
+        input_shape=(nw_img_rows, nw_img_cols, 3),
+        pooling='avg',
+        classes=classes,
+        batch_size=32,
+        att_type=att_type
+    )
+    # model.compile(optimizer=SGDW(lr=0.0001, weight_decay=1e-6, momentum=0.9),
+    #               loss='categorical_crossentropy',
+    #               metrics=['categorical_accuracy'])
+    model.compile(optimizer=Adam(lr=1e-4, beta_1=0.9, beta_2=0.999),
+                  loss='categorical_crossentropy',
+                  metrics=['categorical_accuracy'])
 
-        model.load_weights(weight_name).expect_partial()
+    model.load_weights(os.path.join(os.path.join('/media/jakep/Elements/ImageCLEF2016_weights/2020-07-20/14433'),'cp-0025.ckpt')).expect_partial()
 
-        predict_batch_deficit = model.predict(batch_deficit_test_img, verbose=2)
-        predict = tf.concat([predict_batch_size, predict_batch_deficit], 0)
+    predict_batch_deficit = model.predict(batch_deficit_test_img, verbose=2)
+    predict = tf.concat([predict_batch_size, predict_batch_deficit], 0)
 
-        categorical_accuracy = K.cast(K.equal(K.argmax(test_lbl, axis=-1),
-                                              K.argmax(predict, axis=-1)),
-                                      K.floatx())
-        categorical_accuracy = tf.math.reduce_sum(
-            categorical_accuracy
-        )
+    categorical_accuracy = K.cast(K.equal(K.argmax(test_lbl, axis=-1),
+                                          K.argmax(predict, axis=-1)),
+                                  K.floatx())
+    categorical_accuracy = tf.math.reduce_sum(
+        categorical_accuracy
+    )
 
-        categorical_accuracy = categorical_accuracy/test_img.shape[0]
-        print(weight_name, ' : ', categorical_accuracy)
+    categorical_accuracy = categorical_accuracy/test_img.shape[0]
+    # print(weight_name, ' : ', categorical_accuracy)

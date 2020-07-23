@@ -52,10 +52,8 @@ def visualize_feature_maps(
     print(VISUAL)
     for img in range(0, num_img, 1):
         fig = plt.figure()
-        gs1 = gridspec.GridSpec(2, 2)
-        gs1.update(wspace=0.025, hspace=0.05) # set the spacing between axes.
         for channel in range(1, channels + 1, 1):
-            axis = fig.add_subplot(gs1[channel])
+            axis = fig.add_subplot(math.sqrt(grid_size), math.sqrt(grid_size), channel)
             axis.set_xticks([])
             axis.set_yticks([])
             axis.imshow(feature_maps[img, :, :, channel - 1], cmap='jet')
@@ -66,6 +64,7 @@ def visualize_feature_maps(
             fig.savefig(os.path.join(VISUAL, str(img) + '_' + layer_name + '.png'))
             plt.close()
             print('Saved')
+
 
 
 def check_loaded_data(
@@ -99,7 +98,7 @@ def check_loaded_data(
         axis.set_xticks([])
         axis.set_yticks([])
         axis.imshow(img.astype('uint8'))
-        axis.set_title(label=str(np.argmax(lbls[enum_index]) + 1), y=-0.01) #plus one is important
+        axis.set_title(label=str(np.argmax(lbls[enum_index]) + 1)) #plus one is important
     plt.show()
 
 def plot_history(

@@ -1,13 +1,17 @@
 import os
 import numpy as np
+import tensorflow as tf
 from tensorflow.keras import layers
 from tensorflow.keras import Model
 from tensorflow.keras import utils
 from tensorflow.keras import backend
-import tensorflow as tf
 from tensorflow.keras.utils import plot_model
+#Custom Layers
 from retarget import Retarget
+from squeeze_excite import SEBlock, SELayer
+from BAM import BAMLayer, BAMBlock
 from model_helpers import Normalize, Invert, GausBlur
+
 BASE_WEIGTHS_PATH = (
     'https://github.com/keras-team/keras-applications/'
     'releases/download/densenet/')
@@ -41,6 +45,7 @@ def dense_block(x, blocks, name):
     """
     for i in range(blocks):
         x = conv_block(x, 32, name=name + '_block' + str(i + 1))
+
     return x
 
 
@@ -60,30 +65,6 @@ def transition_block(x, reduction, name):
     x = layers.Conv2D(int(backend.int_shape(x)[bn_axis] * reduction), 1,
                       use_bias=False,
                       name=name + '_conv')(x)
-    if name == 'pool2' and name == 'pool3':
-        for index in range(3):
-            if index < 1:
-                saliency = layers.DepthwiseConv2D(
-                    kernel_size=3,
-                    strides=1,
-                    padding='same',
-                    name='depthwise_conv_' + str(index) + '_' + name,
-                    activation='relu',
-                    depthwise_initializer=tf.keras.initializers.Ones(),
-                    bias_initializer='zeros'
-                    )(x)
-            else:
-                saliency = layers.DepthwiseConv2D(
-                    kernel_size=3,
-                    strides=1,
-                    padding='same',
-                    name='depthwise_conv_' + str(index) + '_' + name,
-                    activation='relu',
-                    depthwise_initializer=tf.keras.initializers.Ones(),
-                    bias_initializer='zeros'
-                    )(saliency)
-        normalize = Normalize(name='normalize_' + name)(saliency)
-        x = Retarget(name='retarget_' + name)([x, normalize])
     x = layers.AveragePooling2D(2, strides=2, name=name + '_pool')(x)
     return x
 
@@ -125,6 +106,7 @@ def DenseNet(blocks,
              classes=1000,
              batch_size=16,
              pth_hist=None,
+             att_type=None,
              **kwargs):
     """Instantiates the DenseNet architecture.
     Optionally loads weights pre-trained on ImageNet.
@@ -176,10 +158,11 @@ def DenseNet(blocks,
     if weights == 'imagenet' and include_top and classes != 1000:
         raise ValueError('If using `weights` as `"imagenet"` with `include_top`'
                          ' as true, `classes` should be 1000')
-
+    if att_type not in ['baseline', 'SE', 'BAM', 'Retarget']:
+        raise ValueError('Custom Attention Module of required type is required to train'
+                         'custom models')
 
     img_input = layers.Input(shape=input_shape, batch_size=batch_size)
-
     bn_axis = 3
 
     x = layers.ZeroPadding2D(padding=((3, 3), (3, 3)))(img_input)
@@ -191,13 +174,45 @@ def DenseNet(blocks,
     x = layers.MaxPooling2D(3, strides=2, name='pool1')(x)
 
     x = dense_block(x, blocks[0], name='conv2')
+    if att_type == 'BAM':
+        x_attention = BAMLayer(reduction_ratio=8)(x)
+        x_attention = layers.multiply([x, x_attention])
+        x = layers.Add()([x, x_attention])
+    elif att_type == 'SE':
+        U = layers.Conv2D(filters=int(backend.int_shape(x)[bn_axis]),
+                          kernel_size=1,
+                          strides=(1, 1),
+                          padding='same')(x)
+        x_attention = SELayer(reduction_ratio=8)(U)
+        x = layers.multiply([x, x_attention])
     x = transition_block(x, 0.5, name='pool2')
     x = dense_block(x, blocks[1], name='conv3')
+    if att_type == 'BAM':
+        x_attention = BAMLayer(reduction_ratio=8)(x)
+        x_attention = layers.multiply([x, x_attention])
+        x = layers.Add()([x, x_attention])
+    elif att_type == 'SE':
+        U = layers.Conv2D(filters=int(backend.int_shape(x)[bn_axis]),
+                          kernel_size=1,
+                          strides=(1, 1),
+                          padding='same')(x)
+        x_attention = SELayer(reduction_ratio=8)(U)
+        x = layers.multiply([x, x_attention])
     x = transition_block(x, 0.5, name='pool3')
     x = dense_block(x, blocks[2], name='conv4')
+    if att_type == 'BAM':
+        x_attention = BAMLayer(reduction_ratio=8)(x)
+        x_attention = layers.multiply([x, x_attention])
+        x = layers.Add()([x, x_attention])
+    elif att_type == 'SE':
+        U = layers.Conv2D(filters=int(backend.int_shape(x)[bn_axis]),
+                          kernel_size=1,
+                          strides=(1, 1),
+                          padding='same')(x)
+        x_attention = SELayer(reduction_ratio=8)(U)
+        x = layers.multiply([x, x_attention])
     x = transition_block(x, 0.5, name='pool4')
     x = dense_block(x, blocks[3], name='conv5')
-
     x = layers.BatchNormalization(
         axis=bn_axis, epsilon=1.001e-5, name='bn')(x)
     x = layers.Activation('relu', name='relu')(x)
@@ -271,6 +286,8 @@ def DenseNet(blocks,
     elif weights is not None:
         model.load_weights(weights, by_name = True)
 
+    if pth_hist != '':
+        plot_model(model, to_file = os.path.join(pth_hist,'model.png'), dpi = 300)
     return model
 
 

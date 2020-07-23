@@ -60,6 +60,7 @@ def image_data_generator(
         color_mode='rgb',
         batch_size=32,
         shuffle=True,
+        seed_value=None,
         horizontal_flip=False
     ):
     '''
@@ -88,7 +89,7 @@ def image_data_generator(
         class_mode='categorical',
         batch_size=batch_size,
         shuffle=shuffle,
-        seed=42,
+        seed=seed_value,
         interpolation='lanczos'
     )
     return generator

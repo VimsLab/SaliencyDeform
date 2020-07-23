@@ -7,6 +7,13 @@ import random
 from contextlib import redirect_stdout
 import yaml
 import numpy as np
+from datetime import datetime
+from collections import Counter
+import tensorflow as tf
+import tensorflow_addons as tfa
+from tensorflow_addons.optimizers.weight_decay_optimizers import SGDW
+from tensorflow.keras.optimizers import Adam
+
 #Load configuration file. Configuration file contains paths to other directories
 pth_config = './config'
 with open(os.path.join(pth_config, 'clef2016.yml'), 'r') as config_fl:
@@ -28,50 +35,63 @@ pths_import = [
 for pth_import in pths_import:
     if pth_import not in sys.path:
         sys.path.append(pth_import)
+
 #Import model for training
-# from common_resnet import ResNet50, ResNet101,ResNet152
-from custom_common_resnet import ResNet50, ResNet101, ResNet152
-
-# from custom_common_densenet import DenseNet169
-# from common_densenet import DenseNet169
-
+from custom_common_densenet import DenseNet169
+from custom_common_resnet import ResNet152
 
 from tensorflow.keras.applications.resnet import preprocess_input as preprocess_input_resnet
+from tensorflow.keras.applications.densenet import preprocess_input as preprocess_input_densenet
+
 #Load data from directory
 from load_data import image_data_generator
 #Import preprocessing functions
 from preprocess import center_crop
 
-import tensorflow as tf
-import tensorflow_addons as tfa
-from tensorflow.keras import Model
-from tensorflow_addons.optimizers.weight_decay_optimizers import SGDW
-from tensorflow.keras.callbacks import LearningRateScheduler
-
 if __name__ == '__main__':
-    #Set up tensorflow envirornment
+    #Set seed value for reproducibility of results
+    seed_value = 1
+
+    # Set random generators to fixed seed value
+    tf.config.threading.set_inter_op_parallelism_threads(1)
+    tf.config.threading.set_intra_op_parallelism_threads(1)
+    tf.random.set_seed(seed_value)
+    np.random.seed(seed_value)
+    random.seed(seed_value)
+
+    #Set up python, tensorflow and CUDA envirornment
+    os.environ['PYTHONHASHSEED'] = str(seed_value)
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-    os.environ["CUDA_VISIBLE_DEVICES"] = '1'
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(config['run_on_gpu'])
     os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
+    os.environ['TF_DETERMINISTIC_OPS'] = '1'
+    os.environ['TF_CUDNN_DETERMINISTIC'] = '1'
     print('Tensorflow version: {0}'.format(tf.__version__))
     print('Tensorflow addons version: {0}'.format(tfa.__version__))
-    print("Num GPUs Used: {0}".format(len(tf.config.experimental.list_physical_devices('GPU'))))
+    print("GPUs Available: {0}".format(len(tf.config.experimental.list_physical_devices('GPU'))))
+    if len(tf.config.experimental.list_physical_devices('GPU')) < 1:
+        raise ValueError('GPU not found!')
 
     #Set up directories
-    weight_name = str(random.randint(0, 100000))
-    WEIGHTS = os.path.join(pth_weights, weight_name)
-    HISTORY = os.path.join(pth_hist, weight_name)
-    VISUAL = os.path.join(pth_visual, weight_name)
-    if not os.path.exists(WEIGHTS):
-        os.mkdir(WEIGHTS)
-    else:
-        raise ValueError('Directory with the same name already exists!')
-    #Save model weights
-    print('Model weights for this run saved at: {0}'.format(WEIGHTS))
-    #Save training history and model summary
+    date = str(datetime.now().date())
+    hour = str(datetime.now().time().hour)
+    minute = str(datetime.now().time().minute)
+    sec = str(datetime.now().time().second)
+
+    if not os.path.exists(os.path.join(pth_hist, date)):
+        os.mkdir(os.path.join(pth_hist, date))
+        os.mkdir(os.path.join(pth_weights, date))
+        os.mkdir(os.path.join(pth_visual, date))
+
+    HISTORY = os.path.join(os.path.join(pth_hist, date), hour+minute+sec)
     os.mkdir(HISTORY)
     print('Model Summary and training history for this run saved at: {0}'.format(HISTORY))
-    #Save visualizations for this run
+
+    WEIGHTS = os.path.join(os.path.join(pth_weights, date), hour+minute+sec)
+    os.mkdir(WEIGHTS)
+    print('Model weights for this run saved at: {0}'.format(WEIGHTS))
+
+    VISUAL = os.path.join(os.path.join(pth_visual, date), hour+minute+sec)
     os.mkdir(VISUAL)
     print('Visualizations for this run must be saved at: {0}'.format(VISUAL))
 
@@ -80,20 +100,43 @@ if __name__ == '__main__':
     classes = config['classes']
     nw_img_cols = config['nw_img_cols']
     nw_img_rows = config['nw_img_rows']
-    model = ResNet152(
-        include_top=False,
-        weights='imagenet',
-        input_shape=(nw_img_rows, nw_img_cols, 3),
-        pooling='avg',
-        classes=classes,
-        pth_hist=HISTORY,
-        batch_size=batch_size
-    )
+    backbone = config['backbone']
+    att_type = config['att_type']
 
-    model.compile(optimizer=SGDW(lr=0.0001, weight_decay=1e-6, momentum=0.9),
+    if backbone == 'DenseNet':
+        model = DenseNet169(
+            include_top=False,
+            weights='imagenet',
+            input_shape=(nw_img_rows, nw_img_cols, 3),
+            pooling='avg',
+            classes=classes,
+            pth_hist=HISTORY,
+            batch_size=batch_size,
+            att_type=att_type
+        )
+        preprocess_input = preprocess_input_densenet
+    elif backbone == 'ResNet':
+        model = ResNet152(
+            include_top=False,
+            weights='imagenet',
+            input_shape=(nw_img_rows, nw_img_cols, 3),
+            pooling='avg',
+            classes=classes,
+            pth_hist=HISTORY,
+            batch_size=batch_size,
+            att_type=att_type
+        )
+        preprocess_input = preprocess_input_resnet
+
+    else:
+        raise ValueError('Only ResNet and DenseNet backbone supported.')
+
+    model.compile(optimizer=Adam(lr=1e-4, beta_1=0.9, beta_2=0.999),
                   loss='categorical_crossentropy',
                   metrics=['categorical_accuracy'])
+
     print('Model compiled')
+
     with open(os.path.join(HISTORY, 'model_summary.txt'), 'w') as f:
         with redirect_stdout(f):
             model.summary()
@@ -106,16 +149,19 @@ if __name__ == '__main__':
     ip_img_cols = config['ip_img_cols']
     ip_img_rows = config['ip_img_rows']
 
-    TRAIN = os.path.join(pth_data, 'Train')
+    TRAIN = os.path.join(pth_data, 'train')
 
     train_gen = image_data_generator(
         in_dir=TRAIN,
-        preprocessing_function=preprocess_input_resnet,
+        preprocessing_function=preprocess_input,
         target_size=(ip_img_rows, ip_img_cols),
         batch_size=batch_size,
         shuffle=True,
+        seed_value=seed_value,
         horizontal_flip=False
     )
+    counter = Counter(train_gen.classes)
+
     steps_per_epoch = len(train_gen)
     #Center crop images
     train_gen = center_crop(
@@ -123,7 +169,8 @@ if __name__ == '__main__':
         height=ip_img_rows,
         width=ip_img_cols,
         crop_length=nw_img_cols,
-        batch_size=batch_size
+        batch_size=batch_size,
+        discard_end=True
     )
     print('\n')
 
@@ -139,14 +186,19 @@ if __name__ == '__main__':
     )
     model.save_weights(CHECKPOINT.format(epoch=0))
 
-    #Train model
+
+    max_val = float(max(counter.values()))
+    class_weights = {class_id : max_val/num_images for class_id, num_images in counter.items()}
+
+    # Train model
     history = model.fit(
         train_gen,
         shuffle=False,
         epochs=epochs,
         steps_per_epoch=steps_per_epoch,
         verbose=1,
-        callbacks=[cp_callback]
+        callbacks=[cp_callback],
+        class_weight=class_weights
     )
 
     #Save training history

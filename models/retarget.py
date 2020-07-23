@@ -1,16 +1,50 @@
 '''
 This module contains the custom model layer that can retarget feature maps
 '''
-import tensorflow as tf
+
 import tensorflow as tf
 from tensorflow.keras.layers import Layer
-from tensorflow.keras import Model
-
+from tensorflow.keras import layers
+import math
 
 class Retarget(Layer):
     '''
     Custom layer that retargets the innermost 2 dimensions of eature maps
     '''
+
+    def __init__(self, name=None):
+        super(Retarget, self).__init__()
+
+        # this is a hyperparameter. Increasing it increases compute cost but lowers the zoom
+        self.grid_size = 56
+        # grid_size = x.shape[1]//2
+
+        # keep padding size low to keep area around zoom low
+        self.padding_size = 15
+        global_size = self.grid_size + 2 * self.padding_size
+
+        P_basis_0 = tf.range(0, global_size, 1, dtype=tf.float32)
+        P_basis_0 = tf.tile(P_basis_0, [global_size])
+        P_basis_0 = tf.reshape(P_basis_0, [global_size, global_size])
+        P_basis_0 = tf.math.subtract(P_basis_0, self.padding_size)
+        P_basis_0 = tf.math.divide(P_basis_0, (self.grid_size-1.0))
+
+        self.P_basis_0 = tf.expand_dims(P_basis_0, 0)
+
+        P_basis_1 = tf.range(0, global_size, 1, dtype=tf.float32)
+        P_basis_1 = tf.reshape(P_basis_1, (global_size, 1))
+        P_basis_1 = tf.tile(P_basis_1, (1, global_size))
+        P_basis_1 = tf.reshape(P_basis_1, [global_size, global_size])
+        P_basis_1 = tf.math.subtract(P_basis_1, self.padding_size)
+        P_basis_1 = tf.math.divide(P_basis_1, (self.grid_size-1.0))
+
+        self.P_basis_1 = tf.expand_dims(P_basis_1, 0)
+
+
+    def build(self, inputs):
+        self.dept_con = layers.DepthwiseConv2D(2*self.padding_size+1,padding='VALID')
+        self.sigma = self.add_weight(name = 'sigma', shape=(1,), initializer="ones", trainable=True)
+        # self.sigma = 13
 
     def call(self, maps):
         '''
@@ -27,23 +61,57 @@ class Retarget(Layer):
         reatarget_maps: retargeted feature maps
         '''
         feature_maps, saliency_maps = maps
+        # print(self.sigma)
+        # tf.print(self.sigma)
         #Add 1e-18 for edge case when activation maps is all 0's
-        saliency_maps = tf.math.add(saliency_maps, 1e-18)
-        x_grids, y_grids = create_grid_4d(saliency_maps)
+        # saliency_maps = tf.math.add(saliency_maps, 1e-18)
 
-        x_grids = tf.image.resize(
-            x_grids,
-            [feature_maps.shape[1], feature_maps.shape[2]],
-            method=tf.image.ResizeMethod.NEAREST_NEIGHBOR
-        )
-        y_grids = tf.image.resize(
-            y_grids,
-            [feature_maps.shape[1], feature_maps.shape[2]],
-            method=tf.image.ResizeMethod.NEAREST_NEIGHBOR
-        )
+
+        x_grids, y_grids = create_grid_4d(saliency_maps, self.grid_size, self.padding_size, self.P_basis_0, self.P_basis_1, self.dept_con, self.sigma)
+
+        # x_grids = tf.image.resize(
+        #     x_grids,
+        #     [feature_maps.shape[1]//2, feature_maps.shape[2]//2],
+        #     method=tf.image.ResizeMethod.NEAREST_NEIGHBOR
+        # )
+        # y_grids = tf.image.resize(
+        #     y_grids,
+        #     [feature_maps.shape[1]//2, feature_maps.shape[2]//2],
+        #     method=tf.image.ResizeMethod.NEAREST_NEIGHBOR
+        # )
         reatarget_maps = nearest_neighbour_interpolation(feature_maps, x_grids, y_grids)
 
         return reatarget_maps
+
+
+
+
+def make_gaussian_learnable(size, sigma=3, center=None):
+    """
+    Description
+    -----------
+    Makes a gaussian kernel
+
+    Args
+    ----
+    size: size of desired kernel
+
+    Returns
+    -------
+    e2: gaussian kernel (size, size)
+    """
+
+    x = tf.range(0, size, 1, tf.float32)
+    y = tf.expand_dims(x, axis=1)
+    if center is None:
+        x0 = y0 = tf.convert_to_tensor(size // 2, tf.float32)
+    else:
+        x0 = center[0]
+        y0 = center[1]
+
+    pi = tf.constant(math.pi)
+
+    return 1/(2*pi*(sigma**2)) * tf.math.exp(-1*((x-x0)**2 + (y-y0)**2)/(2*(sigma**2)))
 
 
 def make_gaussian(size, fwhm=3, center=None):
@@ -61,6 +129,7 @@ def make_gaussian(size, fwhm=3, center=None):
     e2: gaussian kernel (size, size)
     """
     fwhm = tf.convert_to_tensor(fwhm, tf.float32)
+
     x = tf.range(0, size, 1, tf.float32)
     y = tf.expand_dims(x, axis=1)
     if center is None:
@@ -77,7 +146,7 @@ def make_gaussian(size, fwhm=3, center=None):
     e2 = tf.math.exp(e2)
     return e2
 
-def create_grid_4d(x):
+def create_grid_4d(x, grid_size, padding_size, P_basis_0, P_basis_1, dept_con, sigma):
     '''
     Description
     -----------
@@ -91,65 +160,51 @@ def create_grid_4d(x):
     - x_grids: tensor of shape (B, H, W, C)
     - y_grids: tensor of shape (B, H, W, C)
     '''
-    # this is a hyperparameter. Increasing it increases compute cost but lowers the zoom
-    grid_size = x.shape[1]*2
-    # grid_size = x.shape[1]//2
 
-    # keep padding size low to keep area around zoom low
-    padding_size = 3
-    global_size = grid_size + 2 * padding_size
+
+
     num_channels = x.shape[3]
-
-    P_basis_0 = tf.range(0, global_size, 1, dtype=tf.float32)
-    P_basis_0 = tf.tile(P_basis_0, [global_size])
-    P_basis_0 = tf.reshape(P_basis_0, [global_size, global_size])
-    P_basis_0 = tf.math.subtract(P_basis_0, padding_size)
-    P_basis_0 = tf.math.divide(P_basis_0, (grid_size-1.0))
-
-    P_basis_0 = tf.expand_dims(P_basis_0, 0)
-    P_basis_0 = tf.stack([P_basis_0]*num_channels, axis=3)
-
-    P_basis_1 = tf.range(0, global_size, 1, dtype=tf.float32)
-    P_basis_1 = tf.reshape(P_basis_1, (global_size, 1))
-    P_basis_1 = tf.tile(P_basis_1, (1, global_size))
-    P_basis_1 = tf.reshape(P_basis_1, [global_size, global_size])
-    P_basis_1 = tf.math.subtract(P_basis_1, padding_size)
-    P_basis_1 = tf.math.divide(P_basis_1, (grid_size-1.0))
-
-    P_basis_1 = tf.expand_dims(P_basis_1, 0)
-    P_basis_1 = tf.stack([P_basis_1]*num_channels, axis=3)
-
-    gaussian_weight = make_gaussian(2*padding_size+1, 13)
     x = tf.image.resize(x, [grid_size, grid_size])
     x = tf.pad(x, tf.convert_to_tensor([[0, 0], [padding_size, padding_size], [padding_size, padding_size], [0, 0]], tf.int32), "REFLECT")
 
-    gaussian_weights = tf.stack([gaussian_weight]*num_channels, axis=2)
-    gaussian_weights = tf.stack([gaussian_weights]*1, axis=3)
+    # gaussian_weight = make_gaussian(2*padding_size+1, 13)
+    gaussian_weight = make_gaussian_learnable(2*padding_size+1, sigma)
+
+    gaussian_weights1 = tf.stack([gaussian_weight]*num_channels, axis=2)
+    gaussian_weights1 = tf.stack([gaussian_weights1]*1, axis=3)
+
+    # p_filter = dept_con(x)
 
     p_filter = tf.nn.depthwise_conv2d(
         x,
-        gaussian_weights,
-        strides=[1, 1, 1, 1],
-        padding='VALID',
-        data_format='NHWC'
-    )
-    x_mul_x = tf.math.multiply(P_basis_0, x)
-    x_mul_x = tf.nn.depthwise_conv2d(
-        x_mul_x,
-        gaussian_weights,
-        strides=[1, 1, 1, 1],
+        gaussian_weights1,
+        strides=[1, 2, 2, 1],
         padding='VALID',
         data_format='NHWC'
     )
 
+    gaussian_weights2 = tf.stack([gaussian_weight]*num_channels*2, axis=2)
+    gaussian_weights2 = tf.stack([gaussian_weights2]*1, axis=3)
+
+    P_basis_0 = tf.stack([P_basis_0]*num_channels, axis=3)
+    P_basis_1 = tf.stack([P_basis_1]*num_channels, axis=3)
+    x_mul_x = tf.math.multiply(P_basis_0, x)
     x_mul_y = tf.math.multiply(P_basis_1, x)
-    x_mul_y = tf.nn.depthwise_conv2d(
-        x_mul_y,
-        gaussian_weights,
-        strides=[1, 1, 1, 1],
+    x_mul_xy = tf.concat([x_mul_x, x_mul_y], 3)
+    x_mul_xy = tf.nn.depthwise_conv2d(
+        x_mul_xy,
+        gaussian_weights2,
+        strides=[1, 2, 2, 1],
         padding='VALID',
         data_format='NHWC'
     )
+
+    x_mul_x, x_mul_y = tf.split(x_mul_xy, 2, axis = 3)
+    # print(x_mul_x.shape)
+    # x_mul_x = dept_con(x_mul_x)
+    # x_mul_y = dept_con(x_mul_y)
+
+
 
     x_filter = tf.math.divide_no_nan(x_mul_x, p_filter)
     x_grids = tf.math.subtract(tf.math.scalar_mul(2, x_filter), 1)

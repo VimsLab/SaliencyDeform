@@ -10,7 +10,8 @@ def center_crop(
         height=224,
         width=224,
         crop_length=224,
-        batch_size=16
+        batch_size=16,
+        discard_end=True
     ):
     '''
     Description
@@ -45,20 +46,25 @@ def center_crop(
         #Alternative would have been to drop remainder but it will reduces the number
         #of training images per epoch whioch might lead to lower test accuracy
         else:
-            #Makes sure that images not divisible by batch size do not get discarded
-            deficit = batch_size - len(batch_x)
-            while deficit != 0:
-                resample_index = randint(0, len(batch_x) -1)
-                batch_crops = np.concatenate(
-                    [batch_crops, np.expand_dims(batch_crops[resample_index, :, :, :],
+            if discard_end:
+                pass
+            else:
+                #Makes sure that images not divisible by batch size do not get discarded
+                deficit = batch_size - len(batch_x)
+                resampling_index = np.arange(deficit)
+
+                while deficit != 0:
+                    deficit = deficit - 1
+                    resample_index = resampling_index[deficit]
+                    batch_crops = np.concatenate(
+                        [batch_crops, np.expand_dims(batch_crops[resample_index, :, :, :],
+                                                     axis=0)],
+                        axis=0
+                    )
+                    batch_y = np.concatenate(
+                        [batch_y, np.expand_dims(batch_y[resample_index, :],
                                                  axis=0)],
-                    axis=0
-                )
-                batch_y = np.concatenate(
-                    [batch_y, np.expand_dims(batch_y[resample_index, :],
-                                             axis=0)],
-                    axis=0
-                )
-                deficit = deficit - 1
-            # check_loaded_data(batch_crops, batch_y, len(batch_x))
-            yield (batch_crops, batch_y)
+                        axis=0
+                    )
+                # check_loaded_data(batch_crops, batch_y, len(batch_x))
+                yield (batch_crops, batch_y)
