@@ -172,10 +172,17 @@ def DenseNet(blocks,
     x = layers.Activation('relu', name='conv1/relu')(x)
     x = layers.ZeroPadding2D(padding=((1, 1), (1, 1)))(x)
     x = layers.MaxPooling2D(3, strides=2, name='pool1')(x)
+    # if att_type == 'Retarget':
+    #     x_attention = BAMLayer(reduction_ratio=4, dilation_val=1)(x)
+    #     x_attention = layers.Activation('softmax')(x_attention)
+    #     x = Retarget()([x, x_attention])
 
     x = dense_block(x, blocks[0], name='conv2')
+
     if att_type == 'BAM':
-        x_attention = BAMLayer(reduction_ratio=8)(x)
+        x_attention = BAMLayer(reduction_ratio=4, dilation_val=1)(x)
+        x_attention = layers.Activation('sigmoid')(x_attention)
+        x_attention = tf.math.add(1.0, x_attention)
         x_attention = layers.multiply([x, x_attention])
         x = layers.Add()([x, x_attention])
     elif att_type == 'SE':
@@ -183,12 +190,20 @@ def DenseNet(blocks,
                           kernel_size=1,
                           strides=(1, 1),
                           padding='same')(x)
-        x_attention = SELayer(reduction_ratio=8)(U)
+        x_attention = SELayer(reduction_ratio=16)(U)
         x = layers.multiply([x, x_attention])
     x = transition_block(x, 0.5, name='pool2')
+    if att_type == 'Retarget':
+        x_attention = BAMLayer(reduction_ratio=4, dilation_val=1)(x)
+        x_attention = layers.Activation('softmax')(x_attention)
+        x = Retarget()([x, x_attention])
+
     x = dense_block(x, blocks[1], name='conv3')
+
     if att_type == 'BAM':
-        x_attention = BAMLayer(reduction_ratio=8)(x)
+        x_attention = BAMLayer(reduction_ratio=4, dilation_val=1)(x)
+        x_attention = layers.Activation('sigmoid')(x_attention)
+        x_attention = tf.math.add(1.0, x_attention)
         x_attention = layers.multiply([x, x_attention])
         x = layers.Add()([x, x_attention])
     elif att_type == 'SE':
@@ -196,12 +211,20 @@ def DenseNet(blocks,
                           kernel_size=1,
                           strides=(1, 1),
                           padding='same')(x)
-        x_attention = SELayer(reduction_ratio=8)(U)
+        x_attention = SELayer(reduction_ratio=16)(U)
         x = layers.multiply([x, x_attention])
     x = transition_block(x, 0.5, name='pool3')
+    # if att_type == 'Retarget':
+    #     x_attention = BAMLayer(reduction_ratio=4, dilation_val=1)(x)
+    #     x_attention = layers.Activation('softmax')(x_attention)
+    #     x = Retarget()([x, x_attention])
+
     x = dense_block(x, blocks[2], name='conv4')
+
     if att_type == 'BAM':
-        x_attention = BAMLayer(reduction_ratio=8)(x)
+        x_attention = BAMLayer(reduction_ratio=4, dilation_val=1)(x)
+        x_attention = layers.Activation('sigmoid')(x_attention)
+        x_attention = tf.math.add(1.0, x_attention)
         x_attention = layers.multiply([x, x_attention])
         x = layers.Add()([x, x_attention])
     elif att_type == 'SE':
@@ -209,9 +232,13 @@ def DenseNet(blocks,
                           kernel_size=1,
                           strides=(1, 1),
                           padding='same')(x)
-        x_attention = SELayer(reduction_ratio=8)(U)
+        x_attention = SELayer(reduction_ratio=16)(U)
         x = layers.multiply([x, x_attention])
     x = transition_block(x, 0.5, name='pool4')
+    # if att_type == 'Retarget':
+    #     x_attention = BAMLayer(reduction_ratio=4, dilation_val=1)(x)
+    #     x_attention = layers.Activation('softmax')(x_attention)
+    #     x = Retarget()([x, x_attention])
     x = dense_block(x, blocks[3], name='conv5')
     x = layers.BatchNormalization(
         axis=bn_axis, epsilon=1.001e-5, name='bn')(x)

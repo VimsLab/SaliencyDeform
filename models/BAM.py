@@ -109,8 +109,7 @@ class BAMLayer(Layer):
         channel_att = self.channel_att(feature_maps)
         spatial_att = self.spatial_att(feature_maps)
         att = layers.Add()([channel_att, spatial_att])
-        att = layers.Activation('sigmoid')(att)
-        att = tf.math.add(1.0, att)
+
         return att
 
 def channel_gate(feature_maps, reduction_ratio=16):

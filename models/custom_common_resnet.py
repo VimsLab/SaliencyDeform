@@ -90,9 +90,10 @@ def stack1(x, filters, blocks, stride1=2, name=None, att_type=''):
     # Returns
         Output tensor for the stacked blocks.
     """
+
     if  name == 'conv3' or name == 'conv4' or name == 'conv5':
         if att_type == 'BAM':
-            x_attention = BAMLayer()(x)
+            x_attention = BAMLayer(reduction_ratio=4, dilation_val=2)(x)
             x_attention = layers.multiply([x, x_attention])
             x = layers.Add()([x, x_attention])
 
@@ -326,6 +327,7 @@ def ResNet(stack_fn,
 
     x = layers.ZeroPadding2D(padding=((1, 1), (1, 1)), name='pool1_pad')(x)
     x = layers.MaxPooling2D(3, strides=2, name='pool1_pool')(x)
+
 
     x = stack_fn(x, att_type=att_type)
 

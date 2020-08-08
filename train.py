@@ -161,8 +161,8 @@ if __name__ == '__main__':
         horizontal_flip=False
     )
     counter = Counter(train_gen.classes)
-
     steps_per_epoch = len(train_gen)
+
     #Center crop images
     train_gen = center_crop(
         generator=train_gen,
@@ -185,7 +185,6 @@ if __name__ == '__main__':
         period=1
     )
     model.save_weights(CHECKPOINT.format(epoch=0))
-
 
     max_val = float(max(counter.values()))
     class_weights = {class_id : max_val/num_images for class_id, num_images in counter.items()}

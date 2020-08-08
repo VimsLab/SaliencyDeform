@@ -38,7 +38,7 @@ from tensorflow.keras.optimizers import Adam
 if __name__ == '__main__':
     #Set up tensorflow envirornment
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-    os.environ["CUDA_VISIBLE_DEVICES"] = '1'
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(config['run_on_gpu'])
     os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
     print('Tensorflow version: {0}'.format(tf.__version__))
     print('Tensorflow addons version: {0}'.format(tfa.__version__))
@@ -49,75 +49,35 @@ if __name__ == '__main__':
     nw_img_rows = config['nw_img_rows']
     classes = config['classes']
     batch_size = config['batch_size']
-    run = '17124'
-    # run = '29303'
-    # run = '79092'
+    att_type = config['att_type']
 
-    weight_name = os.path.join(pth_weights,'{0}/cp-0030.ckpt'.format(run))
+    pth_weights = '/media/jakep/Elements/ImageCLEF2016_weights/2020-08-08/133811'
+    pth_visual = '/home/jakep/document/clef16/visual/2020-08-08/133811'
+    weight_name = os.path.join(pth_weights,'cp-0004.ckpt')
     model = DenseNet169(
         include_top=False,
         weights=None,
         input_shape=(nw_img_rows, nw_img_cols, 3),
         pooling='avg',
         classes=classes,
-        batch_size=batch_size
+        pth_hist='',
+        batch_size=batch_size,
+        att_type=att_type
     )
-    # model.compile(optimizer=SGDW(lr=0.0001, weight_decay=1e-6, momentum=0.9),
-    #               loss='categorical_crossentropy',
-    #               metrics=['categorical_accuracy'])
+
+
     model.compile(optimizer=Adam(lr=1e-4, beta_1=0.9, beta_2=0.999),
                   loss='categorical_crossentropy',
                   metrics=['categorical_accuracy'])
-
+    model.load_weights(weight_name)
     #name of layers to be visualized
     layer_names = {
-        'pool2_conv',
-        # 'normalize_pool2',
-        'multiply_1',
-        'add_1',
-        'retarget',
         'pool2_pool',
-
-        'pool3_conv',
-        'multiply_3',
-        # 'add_3',
-        # 'normalize_pool3',
-        'retarget_1',
-        'pool3_pool',
-
-        'pool4_conv',
-        # 'add_5',
-        'multiply_5',
-        # 'normalize_pool4',
-        'retarget_2',
-        'pool3_pool',
-
-        # # 'conv2d_1',
-        # 'conv2d_2'
-        # 'conv2d'
-        # 'conv2_block3_out',
-        # 'conv1_pad',
-        # 'depthwise_conv_0_conv1_pad',
-        # 'depthwise_conv_1_conv1_pad',
-        # 'depthwise_conv_2_conv1_pad',
-        # 'normalize_conv1_pad',
-        # 'retarget_conv1_pad',
-        # 'depthwise_conv_0_conv3',
-        # 'normalize_conv3',
-        # 'retarget_conv3',
-        # 'conv4_block36_out',
-        # 'normalize_conv5',
-        # 'retarget_conv5',
-        # 'depthwise_conv_0_conv5',
-        # 'conv3_block8_out',
-        # 'depthwise_conv_0_conv4',
-        # 'normalize_conv4',
-        # 'retarget_conv4',
-        # # 'conv5_block3_out',
-        # 'depthwise_conv_0_avg_pool',
-        # 'normalize_avg_pool',
-        # 'retarget_avg_pool'
+        'bam_layer',
+        'activation',
+        'retarget',
     }
+
     visualize_layers_at = []
     for index, layer in enumerate(model.layers):
         if layer.name in layer_names:
@@ -144,9 +104,9 @@ if __name__ == '__main__':
         print('Predicted')
         channels = 4
         # import numpy as np
-        feature_maps = feature_maps[0:10,:,:,:]
+        feature_maps = feature_maps[0:20,:,:,:]
         num_img = feature_maps.shape[0]
-        VISUAL = os.path.join(pth_visual, run)
+        VISUAL = pth_visual
         visualize_feature_maps(
             num_img=num_img,
             layer_index=visualize_layer_at,
