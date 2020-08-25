@@ -10,13 +10,12 @@ import numpy as np
 from datetime import datetime
 from collections import Counter
 import tensorflow as tf
-import tensorflow_addons as tfa
-from tensorflow_addons.optimizers.weight_decay_optimizers import SGDW
 from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.utils import plot_model
 
 #Load configuration file. Configuration file contains paths to other directories
 pth_config = './config'
-with open(os.path.join(pth_config, 'clef2016.yml'), 'r') as config_fl:
+with open(os.path.join(pth_config, 'clef.yml'), 'r') as config_fl:
     config = yaml.load(config_fl)
 pth_data = config['pth_data']
 pth_utils = config['pth_utils']
@@ -37,12 +36,12 @@ for pth_import in pths_import:
         sys.path.append(pth_import)
 
 #Import model for training
-from custom_common_densenet import DenseNet169
-from custom_common_resnet import ResNet152
-
+from custom_common_densenet import DenseNet121, DenseNet169, DenseNet201
+from custom_common_resnet import ResNet50, ResNet101
+from inception import InceptionV3
 from tensorflow.keras.applications.resnet import preprocess_input as preprocess_input_resnet
 from tensorflow.keras.applications.densenet import preprocess_input as preprocess_input_densenet
-
+from tensorflow.keras.applications.inception_v3 import preprocess_input as preprocess_input_inception
 #Load data from directory
 from load_data import image_data_generator
 #Import preprocessing functions
@@ -67,7 +66,6 @@ if __name__ == '__main__':
     os.environ['TF_DETERMINISTIC_OPS'] = '1'
     os.environ['TF_CUDNN_DETERMINISTIC'] = '1'
     print('Tensorflow version: {0}'.format(tf.__version__))
-    print('Tensorflow addons version: {0}'.format(tfa.__version__))
     print("GPUs Available: {0}".format(len(tf.config.experimental.list_physical_devices('GPU'))))
     if len(tf.config.experimental.list_physical_devices('GPU')) < 1:
         raise ValueError('GPU not found!')
@@ -104,7 +102,7 @@ if __name__ == '__main__':
     att_type = config['att_type']
 
     if backbone == 'DenseNet':
-        model = DenseNet169(
+        model = DenseNet121(
             include_top=False,
             weights='imagenet',
             input_shape=(nw_img_rows, nw_img_cols, 3),
@@ -116,7 +114,7 @@ if __name__ == '__main__':
         )
         preprocess_input = preprocess_input_densenet
     elif backbone == 'ResNet':
-        model = ResNet152(
+        model = ResNet50(
             include_top=False,
             weights='imagenet',
             input_shape=(nw_img_rows, nw_img_cols, 3),
@@ -127,9 +125,18 @@ if __name__ == '__main__':
             att_type=att_type
         )
         preprocess_input = preprocess_input_resnet
-
+    elif backbone == 'Inception':
+        model = InceptionV3(include_top=False,
+                            weights='imagenet',
+                            input_shape=(nw_img_rows, nw_img_cols, 3),
+                            classes=classes,
+                            batch_size=batch_size,
+                            pooling='avg',
+                            by_name=True,
+                            att_type=att_type)
+        preprocess_input = preprocess_input_inception
     else:
-        raise ValueError('Only ResNet and DenseNet backbone supported.')
+        raise ValueError('Only Inception, ResNet and DenseNet backbone supported.')
 
     model.compile(optimizer=Adam(lr=1e-4, beta_1=0.9, beta_2=0.999),
                   loss='categorical_crossentropy',
@@ -140,6 +147,8 @@ if __name__ == '__main__':
     with open(os.path.join(HISTORY, 'model_summary.txt'), 'w') as f:
         with redirect_stdout(f):
             model.summary()
+    plot_model(model, to_file=os.path.join(HISTORY, 'model.png'), dpi=300)
+
     print('Model input image resolution: ' + str(nw_img_cols) + 'x' + str(nw_img_cols))
     print('Model input batch_size: ' + str(batch_size))
 
@@ -170,7 +179,7 @@ if __name__ == '__main__':
         width=ip_img_cols,
         crop_length=nw_img_cols,
         batch_size=batch_size,
-        discard_end=True
+        discard_end=False
     )
     print('\n')
 
@@ -197,7 +206,7 @@ if __name__ == '__main__':
         steps_per_epoch=steps_per_epoch,
         verbose=1,
         callbacks=[cp_callback],
-        class_weight=class_weights
+        # class_weight=class_weights
     )
 
     #Save training history

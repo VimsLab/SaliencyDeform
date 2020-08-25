@@ -8,9 +8,11 @@ from tensorflow.keras import backend
 from tensorflow.keras.utils import plot_model
 #Custom Layers
 from retarget import Retarget
-from squeeze_excite import SEBlock, SELayer
-from BAM import BAMLayer, BAMBlock
-from model_helpers import Normalize, Invert, GausBlur
+from squeeze_excite import SELayer
+from BAM import BAMLayer
+from CBAM import CBAMLayer
+
+from model_helpers import Normalize, Invert, GausBlur, WeightedAdd
 
 BASE_WEIGTHS_PATH = (
     'https://github.com/keras-team/keras-applications/'
@@ -105,7 +107,6 @@ def DenseNet(blocks,
              pooling=None,
              classes=1000,
              batch_size=16,
-             pth_hist=None,
              att_type=None,
              **kwargs):
     """Instantiates the DenseNet architecture.
@@ -158,9 +159,13 @@ def DenseNet(blocks,
     if weights == 'imagenet' and include_top and classes != 1000:
         raise ValueError('If using `weights` as `"imagenet"` with `include_top`'
                          ' as true, `classes` should be 1000')
-    if att_type not in ['baseline', 'SE', 'BAM', 'Retarget']:
+
+    if att_type not in ['baseline', 'SE', 'BAM', 'CBAM', 'Retarget']:
         raise ValueError('Custom Attention Module of required type is required to train'
                          'custom models')
+
+    if input_shape != (224,224,3):
+        raise ValueError('Image dimesions need to be of the size 224 x 224')
 
     img_input = layers.Input(shape=input_shape, batch_size=batch_size)
     bn_axis = 3
@@ -172,40 +177,81 @@ def DenseNet(blocks,
     x = layers.Activation('relu', name='conv1/relu')(x)
     x = layers.ZeroPadding2D(padding=((1, 1), (1, 1)))(x)
     x = layers.MaxPooling2D(3, strides=2, name='pool1')(x)
-    # if att_type == 'Retarget':
-    #     x_attention = BAMLayer(reduction_ratio=4, dilation_val=1)(x)
-    #     x_attention = layers.Activation('softmax')(x_attention)
-    #     x = Retarget()([x, x_attention])
 
     x = dense_block(x, blocks[0], name='conv2')
-
-    if att_type == 'BAM':
-        x_attention = BAMLayer(reduction_ratio=4, dilation_val=1)(x)
-        x_attention = layers.Activation('sigmoid')(x_attention)
-        x_attention = tf.math.add(1.0, x_attention)
-        x_attention = layers.multiply([x, x_attention])
-        x = layers.Add()([x, x_attention])
-    elif att_type == 'SE':
+    if att_type == 'SE':
         U = layers.Conv2D(filters=int(backend.int_shape(x)[bn_axis]),
                           kernel_size=1,
                           strides=(1, 1),
                           padding='same')(x)
         x_attention = SELayer(reduction_ratio=16)(U)
         x = layers.multiply([x, x_attention])
+    elif att_type == 'CBAM':
+        x = CBAMLayer(reduction_ratio=16, kernel_size=7)(x)
+    elif att_type == 'BAM':
+        x_attention = BAMLayer(reduction_ratio=16, dilation_val=4)(x)
+        x_attention = layers.Activation('sigmoid')(x_attention)
+        x_attention = tf.math.add(1.0, x_attention)
+        x_attention = layers.multiply([x, x_attention])
+        x = layers.Add()([x, x_attention])
+
     x = transition_block(x, 0.5, name='pool2')
     if att_type == 'Retarget':
-        x_attention = BAMLayer(reduction_ratio=4, dilation_val=1)(x)
+        ##################################################################################################
+        x_attention1 = layers.DepthwiseConv2D(kernel_size=5,
+                                              strides=(1, 1),
+                                              padding='same')(x)
+        x_attention2 = layers.Conv2D(filters=1,
+                                     kernel_size=5,
+                                     strides=(1, 1),
+                                     padding='same')(x)
+        x_attention = WeightedAdd()(x_attention1, x_attention2)
         x_attention = layers.Activation('softmax')(x_attention)
+        # x_attention = Normalize()(x_attention)
         x = Retarget()([x, x_attention])
+        #################################################################################################
+    elif att_type == 'SE':
+        U = layers.Conv2D(filters=int(backend.int_shape(x)[bn_axis]),
+                          kernel_size=1,
+                          strides=(1, 1),
+                          padding='same')(x)
+        x_attention = SELayer(reduction_ratio=16)(U)
+        x = layers.multiply([x, x_attention])
+    elif att_type ==  'CBAM':
+        x = CBAMLayer(reduction_ratio=16, kernel_size=7)(x)
 
     x = dense_block(x, blocks[1], name='conv3')
-
-    if att_type == 'BAM':
-        x_attention = BAMLayer(reduction_ratio=4, dilation_val=1)(x)
+    if att_type == 'SE':
+        U = layers.Conv2D(filters=int(backend.int_shape(x)[bn_axis]),
+                          kernel_size=1,
+                          strides=(1, 1),
+                          padding='same')(x)
+        x_attention = SELayer(reduction_ratio=16)(U)
+        x = layers.multiply([x, x_attention])
+    elif att_type == 'CBAM':
+        x = CBAMLayer(reduction_ratio=16, kernel_size=7)(x)
+    elif att_type == 'BAM':
+        x_attention = BAMLayer(reduction_ratio=16, dilation_val=4)(x)
         x_attention = layers.Activation('sigmoid')(x_attention)
         x_attention = tf.math.add(1.0, x_attention)
         x_attention = layers.multiply([x, x_attention])
         x = layers.Add()([x, x_attention])
+
+    x = transition_block(x, 0.5, name='pool3')
+    if att_type == 'Retarget':
+        ###############################################################################################
+        x_attention1 = layers.DepthwiseConv2D(kernel_size=5,
+                                              strides=(1, 1),
+                                              padding='same')(x)
+        x_attention2 = layers.Conv2D(filters=1,
+                                     kernel_size=5,
+                                     strides=(1, 1),
+                                     padding='same')(x)
+        x_attention = WeightedAdd()(x_attention1, x_attention2)
+        x_attention = layers.Activation('softmax')(x_attention)
+        # x_attention = Normalize()(x_attention)
+        x = Retarget()([x, x_attention])
+        ##############################################################################################
     elif att_type == 'SE':
         U = layers.Conv2D(filters=int(backend.int_shape(x)[bn_axis]),
                           kernel_size=1,
@@ -213,33 +259,48 @@ def DenseNet(blocks,
                           padding='same')(x)
         x_attention = SELayer(reduction_ratio=16)(U)
         x = layers.multiply([x, x_attention])
-    x = transition_block(x, 0.5, name='pool3')
-    # if att_type == 'Retarget':
-    #     x_attention = BAMLayer(reduction_ratio=4, dilation_val=1)(x)
-    #     x_attention = layers.Activation('softmax')(x_attention)
-    #     x = Retarget()([x, x_attention])
+    elif att_type == 'CBAM':
+        x = CBAMLayer(reduction_ratio=16, kernel_size=7)(x)
 
     x = dense_block(x, blocks[2], name='conv4')
-
-    if att_type == 'BAM':
-        x_attention = BAMLayer(reduction_ratio=4, dilation_val=1)(x)
-        x_attention = layers.Activation('sigmoid')(x_attention)
-        x_attention = tf.math.add(1.0, x_attention)
-        x_attention = layers.multiply([x, x_attention])
-        x = layers.Add()([x, x_attention])
-    elif att_type == 'SE':
+    if att_type == 'SE':
         U = layers.Conv2D(filters=int(backend.int_shape(x)[bn_axis]),
                           kernel_size=1,
                           strides=(1, 1),
                           padding='same')(x)
         x_attention = SELayer(reduction_ratio=16)(U)
         x = layers.multiply([x, x_attention])
+    elif att_type == 'CBAM':
+        x = CBAMLayer(reduction_ratio=16, kernel_size=7)(x)
+    elif att_type == 'BAM':
+        x_attention = BAMLayer(reduction_ratio=16, dilation_val=4)(x)
+        x_attention = layers.Activation('sigmoid')(x_attention)
+        x_attention = tf.math.add(1.0, x_attention)
+        x_attention = layers.multiply([x, x_attention])
+        x = layers.Add()([x, x_attention])
+
     x = transition_block(x, 0.5, name='pool4')
-    # if att_type == 'Retarget':
-    #     x_attention = BAMLayer(reduction_ratio=4, dilation_val=1)(x)
-    #     x_attention = layers.Activation('softmax')(x_attention)
-    #     x = Retarget()([x, x_attention])
+    if att_type == 'SE':
+        U = layers.Conv2D(filters=int(backend.int_shape(x)[bn_axis]),
+                          kernel_size=1,
+                          strides=(1, 1),
+                          padding='same')(x)
+        x_attention = SELayer(reduction_ratio=16)(U)
+        x = layers.multiply([x, x_attention])
+    elif att_type == 'CBAM':
+        x = CBAMLayer(reduction_ratio=16, kernel_size=7)(x)
+
     x = dense_block(x, blocks[3], name='conv5')
+    if att_type == 'SE':
+        U = layers.Conv2D(filters=int(backend.int_shape(x)[bn_axis]),
+                          kernel_size=1,
+                          strides=(1, 1),
+                          padding='same')(x)
+        x_attention = SELayer(reduction_ratio=16)(U)
+        x = layers.multiply([x, x_attention])
+    elif att_type == 'CBAM':
+        x = CBAMLayer(reduction_ratio=16, kernel_size=7)(x)
+
     x = layers.BatchNormalization(
         axis=bn_axis, epsilon=1.001e-5, name='bn')(x)
     x = layers.Activation('relu', name='relu')(x)
@@ -309,12 +370,10 @@ def DenseNet(blocks,
                     DENSENET201_WEIGHT_PATH_NO_TOP,
                     cache_subdir='models',
                     file_hash='c13680b51ded0fb44dff2d8f86ac8bb1')
-        model.load_weights(weights_path, by_name = True)
+        model.load_weights(weights_path, by_name=True)
     elif weights is not None:
-        model.load_weights(weights, by_name = True)
+        model.load_weights(weights, by_name=True)
 
-    if pth_hist != '':
-        plot_model(model, to_file = os.path.join(pth_hist,'model.png'), dpi = 300)
     return model
 
 
@@ -325,12 +384,11 @@ def DenseNet121(include_top=True,
                 pooling=None,
                 classes=1000,
                 batch_size=16,
-                pth_hist=None,
                 **kwargs):
     return DenseNet([6, 12, 24, 16],
                     include_top, weights,
                     input_tensor, input_shape,
-                    pooling, classes, batch_size, pth_hist,
+                    pooling, classes, batch_size,
                     **kwargs)
 
 
@@ -341,12 +399,11 @@ def DenseNet169(include_top=True,
                 pooling=None,
                 classes=1000,
                 batch_size=16,
-                pth_hist=None,
                 **kwargs):
     return DenseNet([6, 12, 32, 32],
                     include_top, weights,
                     input_tensor, input_shape,
-                    pooling, classes, batch_size, pth_hist,
+                    pooling, classes, batch_size,
                     **kwargs)
 
 
@@ -357,10 +414,9 @@ def DenseNet201(include_top=True,
                 pooling=None,
                 classes=1000,
                 batch_size=16,
-                pth_hist=None,
                 **kwargs):
     return DenseNet([6, 12, 48, 32],
                     include_top, weights,
                     input_tensor, input_shape,
-                    pooling, classes, batch_size, pth_hist,
+                    pooling, classes, batch_size,
                     **kwargs)

@@ -17,13 +17,10 @@ class Retarget(Layer):
     def build(self, shape):
         # this is a hyperparameter. Increasing it increases compute cost but lowers the zoom
         axis = 1
-        # self.grid_size = shape[axis][axis]
-        # self.padding_size = (self.grid_size//2 - 1)        #
+        channel_axis = 3
+        self.num_channels = shape[axis][channel_axis]
         self.grid_size = shape[axis][axis]
-        self.padding_size = shape[axis][axis]-1#(self.grid_size//4  - 1)
-        # print(self.padding_size)
-        # keep padding size low to keep area around zoom low
-        # self.padding_size = 3
+        self.padding_size = self.grid_size//8
         global_size = self.grid_size + 2 * self.padding_size
         P_basis_0 = tf.range(0, global_size, 1, dtype=tf.float32)
         P_basis_0 = tf.tile(P_basis_0, [global_size])
@@ -41,7 +38,7 @@ class Retarget(Layer):
         P_basis_1 = tf.math.divide(P_basis_1, (self.grid_size-1.0))
 
         self.P_basis_1 = tf.expand_dims(P_basis_1, 0)
-        # self.sigma = self.add_weight(name = 'sigma', shape=(1,), initializer="ones", trainable=True)
+        self.sigma = self.add_weight(name = 'sigma', shape=(self.num_channels,), initializer="ones", trainable=True)
 
     def call(self, maps):
         '''
@@ -58,23 +55,11 @@ class Retarget(Layer):
         reatarget_maps: retargeted feature maps
         '''
         feature_maps, saliency_maps = maps
-        # print(self.sigma)
-        # tf.print(self.sigma)
         #Add 1e-18 for edge case when activation maps is all 0's
-        # saliency_maps = tf.math.add(saliency_maps, 1e-18)
+        saliency_maps = tf.math.add(saliency_maps, 1e-18)
 
 
         x_grids, y_grids = self.create_grid_4d(saliency_maps)
-        # x_grids = tf.image.resize(
-        #     x_grids,
-        #     [feature_maps.shape[1], feature_maps.shape[2]],
-        #     method=tf.image.ResizeMethod.NEAREST_NEIGHBOR
-        # )
-        # y_grids = tf.image.resize(
-        #     y_grids,
-        #     [feature_maps.shape[1], feature_maps.shape[2]],
-        #     method=tf.image.ResizeMethod.NEAREST_NEIGHBOR
-        # )
         reatarget_maps = self.nearest_neighbour_interpolation(feature_maps, x_grids, y_grids)
 
         return reatarget_maps
@@ -105,8 +90,9 @@ class Retarget(Layer):
 
         pi = tf.constant(math.pi)
 
-        return 1/(2*pi*(sigma**2)) * tf.math.exp(-1*((x-x0)**2 + (y-y0)**2)/(2*(sigma**2)))
-
+        g_weight =  tf.math.exp(tf.stack([((x-x0)**2 + (y-y0)**2)]*self.num_channels, axis=2)/(-2*sigma**2))
+        gaussian_weights =  1/(2*pi*(sigma**2)) * g_weight
+        return gaussian_weights
 
     def make_gaussian(self, size, fwhm=3, center=None):
         """
@@ -155,34 +141,30 @@ class Retarget(Layer):
         - y_grids: tensor of shape (B, H, W, C)
         '''
 
-        num_channels = x.shape[3]
-        # x = tf.image.resize(x, [self.grid_size, self.grid_size])
-
         x = tf.pad(x, tf.convert_to_tensor([[0, 0], [self.padding_size, self.padding_size], [self.padding_size, self.padding_size], [0, 0]], tf.int32), "REFLECT")
-        gaussian_weight = self.make_gaussian(2*self.padding_size+1, 13)
-        # gaussian_weight = self.make_gaussian_learnable(2*self.padding_size+1, self.sigma)
+        # gaussian_weight = self.make_gaussian(2*self.padding_size+1, 13)
+        # gaussian_weights = tf.stack([gaussian_weight]*self.num_channels, axis=2)
+        # gaussian_weights = tf.stack([gaussian_weights]*1, axis=3)
 
-        gaussian_weights1 = tf.stack([gaussian_weight]*num_channels, axis=2)
-        gaussian_weights1 = tf.stack([gaussian_weights1]*1, axis=3)
-
-        # p_filter = dept_con(x)
+        gaussian_weights = self.make_gaussian_learnable(2*self.padding_size+1, self.sigma)
+        gaussian_weights = tf.stack([gaussian_weights]*1, axis=3)
 
         p_filter = tf.nn.depthwise_conv2d(
             x,
-            gaussian_weights1,
+            gaussian_weights,
             strides=[1, 1, 1, 1],
             padding='VALID',
             data_format='NHWC'
         )
 
-        P_basis_0 = tf.stack([self.P_basis_0]*num_channels, axis=3)
-        P_basis_1 = tf.stack([self.P_basis_1]*num_channels, axis=3)
+        P_basis_0 = tf.stack([self.P_basis_0]*self.num_channels, axis=3)
+        P_basis_1 = tf.stack([self.P_basis_1]*self.num_channels, axis=3)
         x_mul_x = tf.math.multiply(P_basis_0, x)
         x_mul_y = tf.math.multiply(P_basis_1, x)
 
         x_mul_x = tf.nn.depthwise_conv2d(
             x_mul_x,
-            gaussian_weights1,
+            gaussian_weights,
             strides=[1, 1, 1, 1],
             padding='VALID',
             data_format='NHWC'
@@ -190,7 +172,7 @@ class Retarget(Layer):
 
         x_mul_y = tf.nn.depthwise_conv2d(
             x_mul_y,
-            gaussian_weights1,
+            gaussian_weights,
             strides=[1, 1, 1, 1],
             padding='VALID',
             data_format='NHWC'
@@ -239,6 +221,7 @@ class Retarget(Layer):
 
         indices = tf.stack([b, y, x, c], 4)
         output = tf.gather_nd(feature_maps, indices)
+
         return output
 
     def nearest_neighbour_interpolation(self, feature_maps, x, y):
@@ -292,4 +275,5 @@ class Retarget(Layer):
         wd = (x-x0) * (y-y0)
         # #This is the trick. Assume all the neighbours are nearest neighbour
         out = tf.add_n([Ia*wa, Ia*wb, Ia*wc, Ia*wd])
+        # out = Ia + x - x + y - y
         return out

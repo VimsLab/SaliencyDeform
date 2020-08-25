@@ -4,13 +4,14 @@ import tensorflow
 from tensorflow.keras import layers
 from tensorflow.keras import Model
 from tensorflow.keras import utils
+from tensorflow.keras import backend
 import tensorflow as tf
 from tensorflow.keras.utils import plot_model
 from retarget import Retarget
-from model_helpers import Normalize, Invert, GausBlur
+from model_helpers import Normalize, Invert, GausBlur, WeightedAdd
 from squeeze_excite import SEBlock, SELayer
 from BAM import BAMLayer, BAMBlock
-
+from CBAM import CBAMLayer
 
 BASE_WEIGHTS_PATH = (
     'https://github.com/keras-team/keras-applications/'
@@ -36,7 +37,7 @@ WEIGHTS_HASHES = {
 
 
 def block1(x, filters, kernel_size=3, stride=1,
-           conv_shortcut=True, name=None):
+           conv_shortcut=True, name=None, att_type=''):
     """A residual block.
     # Arguments
         x: input tensor.
@@ -73,9 +74,17 @@ def block1(x, filters, kernel_size=3, stride=1,
     x = layers.Conv2D(4 * filters, 1, name=name + '_3_conv')(x)
     x = layers.BatchNormalization(axis=bn_axis, epsilon=1.001e-5,
                                   name=name + '_3_bn')(x)
+    if att_type == 'SE':
+        U = layers.Conv2D(filters=int(backend.int_shape(x)[bn_axis]),
+                          kernel_size=kernel_size,
+                          strides=(1, 1),
+                          padding='same')(x)
+        x_attention = SELayer(reduction_ratio=16)(U)
+        x = layers.multiply([x, x_attention])
+    elif att_type == 'CBAM':
+        x = CBAMLayer(reduction_ratio=16, kernel_size=7)(x)
 
     x = layers.Add(name=name + '_add')([shortcut, x])
-    x = layers.Activation('relu', name=name + '_out')(x)
     return x
 
 
@@ -91,15 +100,48 @@ def stack1(x, filters, blocks, stride1=2, name=None, att_type=''):
         Output tensor for the stacked blocks.
     """
 
-    if  name == 'conv3' or name == 'conv4' or name == 'conv5':
-        if att_type == 'BAM':
-            x_attention = BAMLayer(reduction_ratio=4, dilation_val=2)(x)
+    if att_type == 'BAM':
+        if name == 'conv3' or name == 'conv4' or name == 'conv5':
+            x_attention = BAMLayer(reduction_ratio=16, dilation_val=4)(x)
+            x_attention = layers.Activation('sigmoid')(x_attention)
+            x_attention = tf.math.add(1.0, x_attention)
             x_attention = layers.multiply([x, x_attention])
             x = layers.Add()([x, x_attention])
 
-    x = block1(x, filters, stride=stride1, name=name + '_block1')
+    x = block1(x, filters, stride=stride1, name=name + '_block1', att_type=att_type)
+    x = layers.Activation('relu', name=name + '_block1' + '_out')(x)
+
+    if att_type == 'Retarget':
+        if name == 'conv3':
+            x_attention1 = layers.DepthwiseConv2D(kernel_size=5,
+                                                  strides=(1, 1),
+                                                  padding='same')(x)
+            x_attention2 = layers.Conv2D(filters=1,
+                                         kernel_size=5,
+                                         strides=(1, 1),
+                                         padding='same')(x)
+            x_attention = WeightedAdd()(x_attention1, x_attention2)
+            # x_attention = layers.Activation('softmax')(x_attention)
+            x_attention = Normalize()(x_attention)
+            x = Retarget()([x, x_attention])
+        if name == 'conv4':
+            x_attention1 = layers.DepthwiseConv2D(kernel_size=5,
+                                                  strides=(1, 1),
+                                                  padding='same')(x)
+            x_attention2 = layers.Conv2D(filters=1,
+                                         kernel_size=5,
+                                         strides=(1, 1),
+                                         padding='same')(x)
+            x_attention = WeightedAdd()(x_attention1, x_attention2)
+            # x_attention = layers.Activation('softmax')(x_attention)
+            x_attention = Normalize()(x_attention)
+            x = Retarget()([x, x_attention])
+
+
     for i in range(2, blocks + 1):
-        x = block1(x, filters, conv_shortcut=False, name=name + '_block' + str(i))
+        x = block1(x, filters, conv_shortcut=False, name=name + '_block' + str(i), att_type=att_type)
+        x = layers.Activation('relu', name=name + '_block' + str(i) + '_out')(x)
+
     return x
 
 
@@ -309,9 +351,12 @@ def ResNet(stack_fn,
     if weights == 'imagenet' and include_top and classes != 1000:
         raise ValueError('If using `weights` as `"imagenet"` with `include_top`'
                          ' as true, `classes` should be 1000')
-    if att_type not in ['baseline', 'SE', 'BAM', 'Retarget']:
+    if att_type not in ['baseline', 'SE', 'BAM', 'CBAM', 'Retarget']:
         raise ValueError('Custom Attention Module of required type is required to train'
                          'custom models')
+    if input_shape != (224,224,3):
+        raise ValueError('Image dimesions need to be of the size 224 x 224')
+
     # Determine proper input shape
 
     img_input = layers.Input(shape=input_shape, batch_size = batch_size)
@@ -366,7 +411,7 @@ def ResNet(stack_fn,
         by_name = True
         model.load_weights(weights_path, by_name=by_name)
     elif weights is not None:
-        model.load_weights(weights)
+        model.load_weights(weights, by_name=by_name)
     if pth_hist != '':
         plot_model(model, to_file=os.path.join(pth_hist, 'model.png'), dpi=300)
 
@@ -382,11 +427,11 @@ def ResNet50(include_top=True,
              batch_size=16,
              pth_hist=None,
              **kwargs):
-    def stack_fn(x):
-        x = stack1(x, 64, 3, stride1=1, name='conv2')
-        x = stack1(x, 128, 4, name='conv3')
-        x = stack1(x, 256, 6, name='conv4')
-        x = stack1(x, 512, 3, name='conv5')
+    def stack_fn(x, att_type=''):
+        x = stack1(x, 64, 3, stride1=1, name='conv2', att_type=att_type)
+        x = stack1(x, 128, 4, name='conv3', att_type=att_type)
+        x = stack1(x, 256, 6, name='conv4', att_type=att_type)
+        x = stack1(x, 512, 3, name='conv5', att_type=att_type)
         return x
     return ResNet(stack_fn, False, True, 'resnet50',
                   include_top, weights,
@@ -404,11 +449,11 @@ def ResNet101(include_top=True,
               batch_size=16,
               pth_hist=None,
               **kwargs):
-    def stack_fn(x):
-        x = stack1(x, 64, 3, stride1=1, name='conv2')
-        x = stack1(x, 128, 4, name='conv3')
-        x = stack1(x, 256, 23, name='conv4')
-        x = stack1(x, 512, 3, name='conv5')
+    def stack_fn(x, att_type=''):
+        x = stack1(x, 64, 3, stride1=1, name='conv2', att_type=att_type)
+        x = stack1(x, 128, 4, name='conv3', att_type=att_type)
+        x = stack1(x, 256, 23, name='conv4', att_type=att_type)
+        x = stack1(x, 512, 3, name='conv5', att_type=att_type)
         return x
     return ResNet(stack_fn, False, True, 'resnet101',
                   include_top, weights,

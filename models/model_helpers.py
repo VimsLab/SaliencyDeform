@@ -1,5 +1,6 @@
 import tensorflow as tf
 from tensorflow.keras.layers import Layer
+from tensorflow.keras.constraints import MinMaxNorm
 
 def make_gaussian(
         size=None,
@@ -129,3 +130,46 @@ class Invert(Layer):
         '''
         invert_maps = tf.math.subtract(1.0, feature_maps)
         return invert_maps
+
+
+
+class WeightedAdd(Layer):
+    """
+    Description
+    -----------
+    Layer to invert the innermost 2 dimesions of feature maps
+    """
+
+    def __init__(self, name=None):
+        super(WeightedAdd, self).__init__()
+
+    def build(self, shape):
+        weight_constraint = MinMaxNorm(min_value=0.0,
+                                       max_value=1.0,
+                                       rate=1.0,
+                                       axis=0)
+        self.w1 = self.add_weight(name='w1',
+                                  shape=(shape[3],),
+                                  initializer="ones",
+                                  trainable=True,
+                                  constraint=weight_constraint)
+        # self.w2 = self.add_weight(name='w2', shape=(1,), initializer="ones", trainable=True)
+        self.w2 = 1 - self.w1
+
+    def call(self, feature_maps1, feature_maps2):
+        '''
+        Description
+        -----------
+        Invert value of feature maps.
+        Innermost 2 dimesions of activation_maps must be in the range of 0 to 1.
+
+        Args:
+        ----
+        feature_maps: feature maps of shape (B,H,W,C)
+
+        Returns:
+        -------
+        invert_maps: subtracted innermost 2 dimesions of feature maps from 1
+        '''
+        add_maps = self.w1*feature_maps1 + self.w2*feature_maps2
+        return add_maps

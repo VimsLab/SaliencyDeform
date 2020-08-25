@@ -5,7 +5,7 @@ import os
 import sys
 import yaml
 pth_config = './config'
-with open(os.path.join(pth_config, 'clef2016.yml'), 'r') as config_fl:
+with open(os.path.join(pth_config, 'clef.yml'), 'r') as config_fl:
     config = yaml.load(config_fl)
 pth_data = config['pth_data']
 pth_utils = config['pth_utils']
@@ -22,26 +22,23 @@ for pth_import in pths_import:
     if pth_import not in sys.path:
         sys.path.append(pth_import)
 
-from custom_common_densenet import DenseNet169
+from custom_common_densenet import DenseNet121
 
 from load_data import image_data_generator
 from preprocess import center_crop
 from util_visualize import visualize_feature_maps
 
 import tensorflow as tf
-import tensorflow_addons as tfa
 from tensorflow.keras.applications.resnet import preprocess_input as preprocess_input_resnet
-from tensorflow_addons.optimizers.weight_decay_optimizers import SGDW
 from tensorflow.keras import Model, Sequential
 from tensorflow.keras.applications.densenet import preprocess_input as preprocess_input_densenet
 from tensorflow.keras.optimizers import Adam
 if __name__ == '__main__':
     #Set up tensorflow envirornment
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(config['run_on_gpu'])
+    os.environ["CUDA_VISIBLE_DEVICES"] = '0'
     os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
     print('Tensorflow version: {0}'.format(tf.__version__))
-    print('Tensorflow addons version: {0}'.format(tfa.__version__))
     print("Num GPUs Used: {0}".format(len(tf.config.experimental.list_physical_devices('GPU'))))
 
     #Load and compile model. Model must be the same as the one used for training
@@ -51,17 +48,17 @@ if __name__ == '__main__':
     batch_size = config['batch_size']
     att_type = config['att_type']
 
-    pth_weights = '/media/jakep/Elements/ImageCLEF2016_weights/2020-08-08/133811'
-    pth_visual = '/home/jakep/document/clef16/visual/2020-08-08/133811'
-    weight_name = os.path.join(pth_weights,'cp-0004.ckpt')
-    model = DenseNet169(
+    pth_weights = '/media/jakep/Bio-Imaging VR/ImageCLEF2013_weights/2020-08-23/18320'
+    pth_visual = '/home/jakep/document/clef/visual/2020-08-23/18320'
+    weight_name = os.path.join(pth_weights,'cp-0030.ckpt')
+    model = DenseNet121(
         include_top=False,
         weights=None,
         input_shape=(nw_img_rows, nw_img_cols, 3),
         pooling='avg',
         classes=classes,
         pth_hist='',
-        batch_size=batch_size,
+        batch_size=4,
         att_type=att_type
     )
 
@@ -73,9 +70,11 @@ if __name__ == '__main__':
     #name of layers to be visualized
     layer_names = {
         'pool2_pool',
-        'bam_layer',
-        'activation',
+        'normalize',
         'retarget',
+        'pool3_pool',
+        'normalize_1',
+        'retarget_1',
     }
 
     visualize_layers_at = []
@@ -91,12 +90,12 @@ if __name__ == '__main__':
             in_dir=VISUALIZE,
             preprocessing_function=preprocess_input_densenet,
             target_size=(ip_img_rows, ip_img_cols),
-            batch_size=batch_size,
+            batch_size=4,
             horizontal_flip=False,
             shuffle=False
         )
         steps = len(visual_gen)
-        visual_gen = center_crop(visual_gen, ip_img_rows, ip_img_cols, nw_img_cols, batch_size)
+        visual_gen = center_crop(visual_gen, ip_img_rows, ip_img_cols, nw_img_cols, 4)
         layer_name = model.layers[visualize_layer_at].name
         model_partial = Model(inputs=model.input, outputs=model.layers[visualize_layer_at].output)
         print('Partial model compiled with its last layer {0} compiled'.format(layer_name))
